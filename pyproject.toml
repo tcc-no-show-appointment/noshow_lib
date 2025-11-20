@@ -1,0 +1,36 @@
+[project]
+name = "noshow-lib"
+version = "0.1.0"
+description = "Biblioteca noshow-lib é usada para realizar a leitura e processamento de dataframes do pandas para análise de dados em projetos de ciência de dados."
+authors = [
+  { name = "Rodrigo Puertas", email = "mattiolli.puertas@gmail.com" },
+]
+dependencies = [
+  "pandas>=2.1.0,<3.0.0",
+  "PyYAML>=6.0",
+  "scikit-learn>=1.4.0,<2.0.0",
+  "joblib>=1.3",
+  "category-encoders>=2.6.0",
+  "imbalanced-learn>=0.12.0,<1.0.0",
+  "lightgbm>=4.3.0",
+  "xgboost>=2.0.0",
+  "catboost>=1.2.0"
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["library", "python", "dataframe", "processing", "science"]
+
+[project.urls]
+Homepage = "https://github.com/RodrigoPuertas/glpr-lib"
+Repository = "https://github.com/RodrigoPuertas/glpr-lib"
+"Bug Tracker" = "https://github.com/RodrigoPuertas/glpr-lib/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["noshow_lib"]
+package-dir = {"" = "src"}

@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.env
+*.egg-info/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Data
+*.xlsx
+*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Ambientes
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Logs
+*.log
+
+# Distribuição / empacotamento
+.Python
+build/
+dist/
+wheels/
+*.egg
+*.whl
