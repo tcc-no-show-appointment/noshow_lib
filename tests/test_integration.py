@@ -8,47 +8,65 @@ import logging
 from noshow_lib.config import load_config
 from noshow_lib.data_processing import load_and_process_data
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def test_gerar_arquivo_fisico_com_config_real():
+def test_generate_physical_file_with_real_config():
+    """
+    Integration test that:
+    1. Reads the config_test.yaml from the assets folder.
+    2. Uses real raw data from the local disk.
+    3. Processes and SAVES a real file to the preprocessed folder.
+    """
     
-    # 1. SETUP: Definir Caminhos
-    # Pega a pasta raiz para achar o YAML
-    raiz_projeto = Path(__file__).parent.parent
+    # ---------------------------------------------------------
+    # 1. SETUP: Define Paths
+    # ---------------------------------------------------------
+    # Get project root (where pyproject.toml is located)
+    project_root = Path(__file__).parent.parent
+    
+    # Path to the YAML config (in the assets folder)
     yaml_path = Path(__file__).parent / "assets" / "config_test.yaml"
     
-    # --- CORREÇÃO 1: Definir os caminhos reais em variáveis ---
-    caminho_csv_bruto = r'C:\Users\lobat\OneDrive\Área de Trabalho\tcc-rep\noshow-prediction-ml\data\01 - raw\noshowappointments.csv'
+    # --- FIX 1: Define real paths in variables ---
+    # Using raw string (r'') for Windows paths
+    raw_csv_path = r'C:\Users\lobat\OneDrive\Área de Trabalho\tcc-rep\noshow-prediction-ml\data\01 - raw\noshowappointments.csv'
     
     # ==============================================================================
-    # CORREÇÃO AQUI: Adicionei o nome do arquivo "noshowappointments_processed.csv"
+    # FIX HERE: Added the filename "noshowappointments_processed.csv" at the end
     # ==============================================================================
-    caminho_csv_processado = r'C:\Users\lobat\OneDrive\Área de Trabalho\tcc-rep\noshow-prediction-ml\data\02 - preprocessed\noshowappointments_processed.csv'
+    processed_csv_path = r'C:\Users\lobat\OneDrive\Área de Trabalho\tcc-rep\noshow-prediction-ml\data\02 - preprocessed\noshowappointments_processed.csv'
     
-    # 2. Carregar Configuração
-    config_completa = load_config(yaml_path)
+    # ---------------------------------------------------------
+    # 2. SETUP: Load Configuration
+    # ---------------------------------------------------------
+    full_config = load_config(yaml_path)
 
-    # 3. EXECUÇÃO
-    # Passamos as variáveis que definimos acima
-    df_resultado = load_and_process_data(
-        input_data=caminho_csv_bruto,
-        processed_path=caminho_csv_processado,
-        config=config_completa.get("preprocessing")
+    # ---------------------------------------------------------
+    # 3. EXECUTION
+    # ---------------------------------------------------------
+    # We pass the variables defined above
+    df_result = load_and_process_data(
+        input_data=raw_csv_path,
+        processed_path=processed_csv_path,
+        config=full_config.get("preprocessing")
     )
 
-    # 4. VERIFICAÇÃO
+    # ---------------------------------------------------------
+    # 4. VERIFICATION
+    # ---------------------------------------------------------
     
-    # --- CORREÇÃO 2: Verificar o arquivo correto ---
-    # Agora checamos se o arquivo (e não a pasta) foi criado
-    assert Path(caminho_csv_processado).exists()
-    print(f"\nSUCESSO! Arquivo gerado em: {caminho_csv_processado}")
+    # --- FIX 2: Verify the correct file ---
+    # Now we check if the specific file (not just the folder) exists
+    assert Path(processed_csv_path).exists()
+    print(f"\nSUCCESS! File generated at: {processed_csv_path}")
     
-    # --- CORREÇÃO 3: Verificar a coluna correta (Inglês) ---
-    # O dataset original usa "Age", não "idade"
-    if "Age" in df_resultado.columns:
-        assert df_resultado["Age"].isnull().sum() == 0
-        print("Coluna 'Age' verificada: zero nulos.")
+    # --- FIX 3: Verify the correct column (English) ---
+    # The original dataset uses "Age", not "idade"
+    if "Age" in df_result.columns:
+        assert df_result["Age"].isnull().sum() == 0
+        print("Column 'Age' verified: zero nulls.")
     else:
-        # Caso você tenha renomeado no YAML, ajustamos aqui
-        print(f"Aviso: Colunas encontradas: {df_resultado.columns.tolist()}")
+        # Fallback if columns were renamed in YAML
+        print(f"Warning: Columns found in DataFrame: {df_result.columns.tolist()}")

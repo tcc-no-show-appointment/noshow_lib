@@ -64,6 +64,7 @@ def build_features(df: pd.DataFrame, data_cfg: Dict) -> pd.DataFrame:
             )
             .query("Age >= 0")
             .dropna(subset=["ScheduledDay", "AppointmentDay"])
+            .sort_values("AppointmentDay")
         )
     except Exception as e:
         logger.error(f"Error during data cleaning/conversion: {e}")
@@ -81,6 +82,8 @@ def build_features(df: pd.DataFrame, data_cfg: Dict) -> pd.DataFrame:
             hour_appointment=lambda x: x["AppointmentDay"].dt.hour,
             is_weekend=lambda x: x["AppointmentDay"].dt.weekday.isin([5, 6]).astype(int),
         )
+
+        df_temp["waiting_days"] = df_temp["waiting_days"].clip(lower=0)
     except Exception as e:
         logger.error(f"Error creating temporal features: {e}")
         raise
@@ -89,13 +92,12 @@ def build_features(df: pd.DataFrame, data_cfg: Dict) -> pd.DataFrame:
     # 4. Patient History (Previous Appointments)
     # -------------------------------------------------------------------
     try:
-        if "PatientId" in df_temp.columns and "AppointmentID" in df_temp.columns:
-            # Note: Ensure data is sorted by date if you want true historical count
-            df_temp["previous_appointments"] = (
-                df_temp.groupby("PatientId")["AppointmentID"].transform("count") - 1
+        if "PatientId" in df_temp.columns:
+            df_temp["previous_appointments_count"] = (
+                df_temp.groupby("PatientId").cumcount()
             )
         else:
-            logger.warning("PatientId or AppointmentID missing. Skipping 'previous_appointments'.")
+            logger.warning("PatientId missing. Skipping 'previous_appointments_count'.")
             
     except Exception as e:
         logger.error(f"Error calculating previous appointments: {e}")
@@ -121,7 +123,9 @@ def build_features(df: pd.DataFrame, data_cfg: Dict) -> pd.DataFrame:
         if "Age" in df_temp.columns:
             # Using max() + 1 to ensure the highest value is included
             max_age = df_temp["Age"].max()
-            age_bins = [0, 1, 13, 18, 60, max_age + 1]
+
+            teto = max(61, max_age + 1)
+            age_bins = [0, 1, 13, 18, 60, teto]
             age_labels = ["baby", "child", "teen", "adult", "senior"]
 
             df_temp["age_group"] = pd.cut(
