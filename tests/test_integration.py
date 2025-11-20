@@ -42,13 +42,13 @@ def test_gerar_arquivo_fisico_com_config_real():
     # --- CORREÇÃO 2: Verificar o arquivo correto ---
     # Agora checamos se o arquivo (e não a pasta) foi criado
     assert Path(caminho_csv_processado).exists()
-    print(f"\n✅ SUCESSO! Arquivo gerado em: {caminho_csv_processado}")
+    print(f"\nSUCESSO! Arquivo gerado em: {caminho_csv_processado}")
     
     # --- CORREÇÃO 3: Verificar a coluna correta (Inglês) ---
     # O dataset original usa "Age", não "idade"
     if "Age" in df_resultado.columns:
         assert df_resultado["Age"].isnull().sum() == 0
-        print("✅ Coluna 'Age' verificada: zero nulos.")
+        print("Coluna 'Age' verificada: zero nulos.")
     else:
         # Caso você tenha renomeado no YAML, ajustamos aqui
-        print(f"⚠️ Aviso: Colunas encontradas: {df_resultado.columns.tolist()}")
+        print(f"Aviso: Colunas encontradas: {df_resultado.columns.tolist()}")
