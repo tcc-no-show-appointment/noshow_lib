@@ -23,7 +23,7 @@ preprocessing:
 # Configuração do split temporal
 split:
   strategy: "time"          # "random" ou "time"
-  date_column: "appointment_date"
+  date_column: "AppointmentDay"
   train_frac: 0.6
   valid_frac: 0.2
   test_frac: 0.2
@@ -37,23 +37,51 @@ balancing:
     k_neighbors: 5              # Número de vizinhos para o SMOTE
 
 
-model:
-  type: "RandomForest"
-  parameters:
-    n_estimators: 100
-    max_depth: 10
-    min_samples_split: 5
-    min_samples_leaf: 2
-    random_state: 42
+# model:
+#   type: "RandomForest"
+#   parameters:
+#     n_estimators: 100
+#     max_depth: 10
+#     min_samples_split: 5
+#     min_samples_leaf: 2
+#     random_state: 42
 
+
+# training:
+#   cv_folds: 5                               # Número de folds para cross-validation
+#   shuffle: false                            # Se deve embaralhar os dados antes do CV
+#   scoring: "average_precision"              # Métrica para avaliação durante o treinamento
+#   early_stopping: false                     # é usado para parar mais cedo se a métrica não melhorar
+#   save_best_only: true                      # Se deve salvar apenas o melhor modelo
+#   monitor_metric: "average_precision"       # Métrica a ser monitorada para salvar o melhor modelo
+
+model:
+  type: "LGBMClassifier"
+  parameters:
+    # Parâmetros principais
+    n_estimators: 200             # LightGBM geralmente precisa de mais árvores que o RF
+    learning_rate: 0.05           # Taxa de aprendizado (menor = mais preciso, mas precisa de mais n_estimators)
+    num_leaves: 31                # Principal controle de complexidade (31 é o padrão)
+    max_depth: -1                 # -1 significa ilimitado (controlado por num_leaves)
+    
+    # Controle de Overfitting
+    min_child_samples: 20         # Equivalente ao min_samples_leaf
+    subsample: 0.8                # Usa 80% dos dados por árvore (evita overfitting)
+    colsample_bytree: 0.8         # Usa 80% das colunas por árvore
+    
+    # Configurações do problema
+    objective: "binary"           # Classificação binária (0 ou 1)
+    class_weight: "balanced"      # Ajuda muito se tiver poucos casos de No-Show
+    random_state: 42
+    n_jobs: -1                    # Usa todos os processadores
 
 training:
-  cv_folds: 5                               # Número de folds para cross-validation
-  shuffle: false                            # Se deve embaralhar os dados antes do CV
-  scoring: "average_precision"              # Métrica para avaliação durante o treinamento
-  early_stopping: false                     # é usado para parar mais cedo se a métrica não melhorar
-  save_best_only: true                      # Se deve salvar apenas o melhor modelo
-  monitor_metric: "average_precision"       # Métrica a ser monitorada para salvar o melhor modelo
+  cv_folds: 5
+  shuffle: false
+  scoring: "f1"                   # LightGBM geralmente foca em logloss, mas F1 ou ROC_AUC são bons para avaliação
+  early_stopping: true            # O código precisa suportar callbacks para isso funcionar
+  save_best_only: true
+  monitor_metric: "f1"
 
 
 evaluation:                                 # Configurações de avaliação do modelo

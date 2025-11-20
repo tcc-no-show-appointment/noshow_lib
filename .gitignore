@@ -1,33 +1,27 @@
-# Python
+# ==========================
+# Python (Compilados e Cache)
+# ==========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python/
-env/
-venv/
-.env
+.Python
 *.egg-info/
-.pytest_cache/
+src/*.egg-info/
 
-# Jupyter Notebook
-.ipynb_checkpoints/
+# ==========================
+# Distribuição / Empacotamento (Build da Lib)
+# ==========================
+build/
+dist/
+wheels/
+*.egg
+*.whl
 
-# Data
-*.xlsx
-*.json
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*~
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Ambientes
+# ==========================
+# Ambientes Virtuais & Variáveis
+# ==========================
+# Protege suas senhas e evita subir a venv inteira
 .env
 .venv
 env/
@@ -36,13 +30,45 @@ ENV/
 env.bak/
 venv.bak/
 
-# Logs
-*.log
+# ==========================
+# Testes e Qualidade
+# ==========================
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Distribuição / empacotamento
-.Python
-build/
-dist/
-wheels/
-*.egg
-*.whl
+# ==========================
+# Dados (A parte mais importante!)
+# ==========================
+# Ignora todos os arquivos pesados comuns
+*.csv
+*.xlsx
+*.json
+*.parquet
+*.pkl
+*.joblib
+
+# Ignora TUDO dentro da pasta data
+data/*
+
+data/debug_output/
+
+# ==========================
+# Jupyter Notebooks
+# ==========================
+.ipynb_checkpoints/
+
+# ==========================
+# IDE e Sistema Operacional
+# ==========================
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Logs
+# ==========================
+*.log
