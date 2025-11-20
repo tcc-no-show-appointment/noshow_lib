@@ -1,6 +1,7 @@
 # src/noshow_lib/data_processing.py
 
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 from pathlib import Path
 from typing import Union, Dict, Optional
 import logging
@@ -46,7 +47,17 @@ def load_and_process_data(
             raise FileNotFoundError(f"File not found: {raw_path}")
         
         logger.info(f"Loading raw data from: {raw_path}")
-        df = pd.read_csv(raw_path)
+        try:
+            df = pd.read_csv(raw_path)
+        except EmptyDataError:
+            logger.error(f"The file is empty: {raw_path}")
+            raise # Interrompe o programa
+        except ParserError:
+            logger.error(f"The file is corrupted or not a valid CSV: {raw_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error reading CSV: {e}")
+            raise
 
     # Early return if no config provided
     if not config:
@@ -110,9 +121,38 @@ def load_and_process_data(
     # FINAL: Save processed file
     # =====================================================================
     if processed_path:
-        processed_path = Path(processed_path)
-        processed_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(processed_path, index=False)
-        logger.info(f"Processed data saved to: {processed_path}")
+            _save_securely(df, processed_path)
 
     return df
+
+
+def _save_securely(df: pd.DataFrame, path: Union[str, Path]) -> None:
+    """
+    Internal helper to securely save the DataFrame to a CSV file.
+
+    This function ensures the output directory exists before saving and 
+    provides robust error logging for common I/O issues.
+
+    Args:
+        df (pd.DataFrame): The pandas DataFrame to be saved.
+        path (str | Path): The destination file path.
+
+    Raises:
+        PermissionError: If the program lacks write permissions for the target directory.
+        OSError: If the disk is full or another OS-level error occurs during writing.
+    """
+    try:
+        path_obj = Path(path)
+        
+        # Ensure parent directory exists
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        
+        df.to_csv(path_obj, index=False)
+        logger.info(f"Processed data saved to: {path_obj}")
+        
+    except PermissionError:
+        logger.error(f"Permission denied when writing to: {path}")
+        raise
+    except OSError as e:
+        logger.error(f"Disk error (full?) or OS error when writing to {path}: {e}")
+        raise
