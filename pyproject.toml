@@ -1,6 +1,6 @@
 [project]
 name = "noshow-lib"
-version = "0.1.0"
+version = "0.1.1"
 description = "Biblioteca noshow-lib é usada para realizar a leitura e processamento de dataframes do pandas para análise de dados em projetos de ciência de dados."
 authors = [
   { name = "Rodrigo Puertas", email = "mattiolli.puertas@gmail.com" },

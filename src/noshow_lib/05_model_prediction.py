@@ -1,3 +1,5 @@
+#configurar com o Yaml passando por parametro
+
 import pandas as pd
 import joblib
 from pathlib import Path
