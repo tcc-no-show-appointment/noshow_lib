@@ -1,98 +1,52 @@
-# Configuration file for ML project Example
-
 data:
   raw_data_path: "data/01 - raw/noshowappointments.csv"
   processed_data_path: "data/02 - preprocessed/noshowappointments_processed.csv"
-  # train_path e test_path podem ser definidos posteriormente se houver um split
-  # test_path: "data/02 - preprocessed/test.csv"   # opcional, se você for usar depois
   validation_split: 0.2
   target_column: "No-show"
 
 preprocessing:
-  handle_missing: "median"        # Como tratar os dados em caso de NAN (median, mean, drop)
-  categorical_encoding: "onehot"  # Como converter valores categóricos (onehot, label, target)
-  numerical_scaling: "standard"   # Como escalar features numéricas (standard, minmax, robust)
-  feature_selection:              # Método de seleção de features
-    method: "correlation"         # (correlation, mutual_info, recursive_elimination)
-    threshold: 0.8                # Se correlação > 0.8 a feature será removida
-  # outlier_treatment:
-  #   enabled: false
-  #   method: "zscore"               # (zscore, iqr)
-  #   threshold: 3.0                 # Limite para considerar um ponto como outlier
+  handle_missing: "median"
+  categorical_encoding: "onehot"
+  numerical_scaling: "standard"
+  feature_selection:
+    method: "correlation"
+    threshold: 0.8
 
-# Configuração do split temporal
 split:
-  strategy: "time"          # "random" ou "time"
+  strategy: "time"
   date_column: "AppointmentDay"
-  train_frac: 0.6
-  valid_frac: 0.2
   test_frac: 0.2
 
-# Configuração do balanceamento de classes
 balancing: 
-  enabled: true                   # true ou false
-  method: "smote"                 # smote, class_weight, undersample, oversample
-  smote:  
-    sampling_strategy: 0.3      # Proporção da classe minoritária após o balanceamento
-    k_neighbors: 5              # Número de vizinhos para o SMOTE
-
-
-# model:
-#   type: "RandomForest"
-#   parameters:
-#     n_estimators: 100
-#     max_depth: 10
-#     min_samples_split: 5
-#     min_samples_leaf: 2
-#     random_state: 42
-
-
-# training:
-#   cv_folds: 5                               # Número de folds para cross-validation
-#   shuffle: false                            # Se deve embaralhar os dados antes do CV
-#   scoring: "average_precision"              # Métrica para avaliação durante o treinamento
-#   early_stopping: false                     # é usado para parar mais cedo se a métrica não melhorar
-#   save_best_only: true                      # Se deve salvar apenas o melhor modelo
-#   monitor_metric: "average_precision"       # Métrica a ser monitorada para salvar o melhor modelo
+  enabled: true
+  method: "smote"             # smote ou smoteenn
+  ratio: 0.5                  # No notebook você usou 0.5, no yaml estava 0.3. Ajuste aqui.
+  k_neighbors: 5
 
 model:
-  type: "LGBMClassifier"
+  type: "LGBMClassifier"      # Nome exato da classe
   parameters:
-    # Parâmetros principais
-    n_estimators: 200             # LightGBM geralmente precisa de mais árvores que o RF
-    learning_rate: 0.05           # Taxa de aprendizado (menor = mais preciso, mas precisa de mais n_estimators)
-    num_leaves: 31                # Principal controle de complexidade (31 é o padrão)
-    max_depth: -1                 # -1 significa ilimitado (controlado por num_leaves)
-    
-    # Controle de Overfitting
-    min_child_samples: 20         # Equivalente ao min_samples_leaf
-    subsample: 0.8                # Usa 80% dos dados por árvore (evita overfitting)
-    colsample_bytree: 0.8         # Usa 80% das colunas por árvore
-    
-    # Configurações do problema
-    objective: "binary"           # Classificação binária (0 ou 1)
-    class_weight: "balanced"      # Ajuda muito se tiver poucos casos de No-Show
+    n_estimators: 300
+    learning_rate: 0.01
+    num_leaves: 20
+    max_depth: 5
+    min_child_samples: 20
+    subsample: 0.7
+    colsample_bytree: 0.7
+    objective: "binary"
+    class_weight: "balanced"
     random_state: 42
-    n_jobs: -1                    # Usa todos os processadores
+    n_jobs: -1
+    verbosity: -1           
 
-training:
-  cv_folds: 5
-  shuffle: false
-  scoring: "f1"                   # LightGBM geralmente foca em logloss, mas F1 ou ROC_AUC são bons para avaliação
-  early_stopping: true            # O código precisa suportar callbacks para isso funcionar
-  save_best_only: true
-  monitor_metric: "f1"
-
-
-evaluation:                                 # Configurações de avaliação do modelo
-  metrics:                                  # Métricas a serem calculadas na avaliação do modelo
-    - "roc_auc"                             # Área sob a curva ROC
-    - "average_precision"                   # Precisão média (AUC-PR)
-    - "recall"                              # Revocação (Sensibilidade)
-    - "f1"                                  # Pontuação F1                 
-    - "accuracy"                            # Acurácia
-  threshold_optimization:                   # Configuração para otimização do limiar de decisão
-    enabled: true                           # true ou false
-    optimize_for:                           # Métrica para otimizar o limiar (precision, recall, f1, accuracy)    
-      primary: "recall"                     # Métrica principal para otimização
-      secondary: "precision"                # Métrica secundária para otimização
+evaluation:
+  metrics:
+    - "roc_auc"
+    - "average_precision"
+    - "recall"
+    - "f1"
+    - "accuracy"
+  threshold_optimization:
+    enabled: true
+    optimize_for:
+      primary: "f1"           # F1 costuma ser melhor para equilibrar recall/precision
