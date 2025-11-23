@@ -52,8 +52,11 @@ def main():
 
     # Define Output Paths
     features_path = project_root / "data" / "03 - features" / "dataset_final.csv"
-    model_path = project_root / "models" / "pipeline.joblib"
-    metrics_path = project_root / "models" / "metrics.csv"
+    
+    # Extract output paths from config (added for consistency)
+    output_cfg = config.get("output", {})
+    model_path = project_root / output_cfg.get("model_path", "models/pipeline.joblib")
+    metrics_path = project_root / output_cfg.get("metrics_path", "models/metrics.csv")
 
     # =================================================================
     # 2. DATA PROCESSING (Clean & Filter)
@@ -97,10 +100,11 @@ def main():
     
     try:
         train_model(
-            data_path=features_path,        # Input: The CSV generated in step 3
-            model_output_path=model_path,   # Output: The trained model
+            config=config,                   # Config required for local mode
+            data_path=features_path,         # Input: The CSV generated in step 3
+            model_output_path=model_path,    # Output: The trained model
             metrics_output_path=metrics_path, # Output: The metrics CSV
-            config=config                   # Full config for split/model params
+            is_external_access=False         # Local mode: save to disk
         )
         
         logger.info("Pipeline finished successfully.")

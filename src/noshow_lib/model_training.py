@@ -158,46 +158,86 @@ def temporal_split(df: pd.DataFrame, target_col: str, date_col: str, test_frac: 
         raise
 
 def train_model(
-    data_path: Union[str, Path], 
-    model_output_path: Union[str, Path], 
-    metrics_output_path: Union[str, Path], 
-    config: Dict
-) -> None:
+    df_input: pd.DataFrame = None,
+    is_external_access: bool = False,
+    config: Dict = None,
+    data_path: Union[str, Path] = None, 
+    model_output_path: Union[str, Path] = None, 
+    metrics_output_path: Union[str, Path] = None
+) -> Union[None, Tuple[bytes, Dict]]:
     """
     Orchestrates the model training pipeline: loading, splitting, preprocessing, 
     training, evaluating, and saving artifacts based on YAML configuration.
 
     Args:
-        data_path (str | Path): Path to the feature-engineered CSV.
-        model_output_path (str | Path): Path to save the trained .joblib pipeline.
-        metrics_output_path (str | Path): Path to save evaluation metrics CSV.
-        config (Dict): Parsed YAML configuration dictionary.
+        df_input (pd.DataFrame): Input DataFrame with features. Required when is_external_access=True.
+        is_external_access (bool): If True, uses df_input, loads config from local config.yaml, 
+                                   and returns (model_bytes, metrics_dict) instead of saving to disk.
+        config (Dict): Parsed YAML configuration dictionary. Required when is_external_access=False.
+        data_path (str | Path): Path to the feature-engineered CSV. Required when is_external_access=False.
+        model_output_path (str | Path): Path to save the trained .joblib pipeline. Required when is_external_access=False.
+        metrics_output_path (str | Path): Path to save evaluation metrics CSV. Required when is_external_access=False.
+
+    Returns:
+        None: When is_external_access=False (local mode).
+        Tuple[bytes, Dict]: When is_external_access=True, returns (model_joblib_bytes, metrics_dict).
 
     Raises:
-        FileNotFoundError: If data_path does not exist.
+        FileNotFoundError: If data_path does not exist (local mode) or config.yaml not found (external mode).
+        ValueError: If required parameters are missing for the selected mode.
         KeyError: If required configuration keys are missing.
         RuntimeError: If training fails.
     """
-    data_path = Path(data_path)
-    model_output_path = Path(model_output_path)
-    metrics_output_path = Path(metrics_output_path)
-
     # =========================================================
-    # 1. Load Data
+    # 1. Setup Paths, Load Config and Data
     # =========================================================
-    if not data_path.exists():
-        logger.error(f"Data file not found: {data_path}")
-        raise FileNotFoundError(f"Data file not found: {data_path}")
     
-    try:
-        logger.info(f"Loading training data from: {data_path}")
-        df = pd.read_csv(data_path)
-    except (EmptyDataError, ParserError) as e:
-        logger.error(f"Error reading CSV file: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error loading data: {e}")
-        raise
+    # External Access Mode: use DataFrame input, load config from local file
+    if is_external_access:
+        if df_input is None:
+            raise ValueError("df_input must be provided when is_external_access=True")
+        
+        logger.info("External access mode: using DataFrame input")
+        df = df_input.copy()
+        
+        # Load config from local config.yaml
+        try:
+            from noshow_lib.config import load_config
+            config_path = Path(__file__).parent.parent.parent / "config.yaml"
+            if not config_path.exists():
+                raise FileNotFoundError(f"config.yaml not found at: {config_path}")
+            config = load_config(config_path)
+            logger.info(f"Loaded configuration from: {config_path}")
+        except Exception as e:
+            logger.error(f"Failed to load config in external mode: {e}")
+            raise
+    
+    # Local Mode: use provided paths and config for loading and saving
+    else:
+        if config is None:
+            raise ValueError("config must be provided when is_external_access=False")
+        if data_path is None:
+            raise ValueError("data_path must be provided when is_external_access=False")
+        if model_output_path is None or metrics_output_path is None:
+            raise ValueError("model_output_path and metrics_output_path must be provided when is_external_access=False")
+        
+        data_path = Path(data_path)
+        model_output_path = Path(model_output_path)
+        metrics_output_path = Path(metrics_output_path)
+        
+        if not data_path.exists():
+            logger.error(f"Data file not found: {data_path}")
+            raise FileNotFoundError(f"Data file not found: {data_path}")
+        
+        try:
+            logger.info(f"Loading training data from: {data_path}")
+            df = pd.read_csv(data_path)
+        except (EmptyDataError, ParserError) as e:
+            logger.error(f"Error reading CSV file: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error loading data: {e}")
+            raise
 
     # =========================================================
     # 2. Parse Configuration
@@ -318,25 +358,39 @@ def train_model(
         logger.info(f"Evaluation Results: {metrics_results}")
 
         # =========================================================
-        # 10. Save Artifacts
+        # 10. Save Artifacts or Return Results
         # =========================================================
-        # Save Model
-        try:
-            model_output_path.parent.mkdir(parents=True, exist_ok=True)
-            joblib.dump(pipeline, model_output_path)
-            logger.info(f"Model saved successfully to: {model_output_path}")
-        except PermissionError:
-            logger.error(f"Permission denied saving model to: {model_output_path}")
-            raise
         
-        # Save Metrics
-        try:
-            metrics_output_path.parent.mkdir(parents=True, exist_ok=True)
-            pd.DataFrame([metrics_results]).to_csv(metrics_output_path, index=False)
-            logger.info(f"Metrics saved successfully to: {metrics_output_path}")
-        except PermissionError:
-            logger.error(f"Permission denied saving metrics to: {metrics_output_path}")
-            raise
+        if is_external_access:
+            # External mode: serialize model to bytes and return with metrics
+            logger.info("External access mode: serializing model to bytes")
+            from io import BytesIO
+            buffer = BytesIO()
+            joblib.dump(pipeline, buffer)
+            model_bytes = buffer.getvalue()
+            
+            logger.info(f"Model serialized: {len(model_bytes)} bytes")
+            return (model_bytes, metrics_results)
+        
+        else:
+            # Local mode: save to disk
+            # Save Model
+            try:
+                model_output_path.parent.mkdir(parents=True, exist_ok=True)
+                joblib.dump(pipeline, model_output_path)
+                logger.info(f"Model saved successfully to: {model_output_path}")
+            except PermissionError:
+                logger.error(f"Permission denied saving model to: {model_output_path}")
+                raise
+            
+            # Save Metrics
+            try:
+                metrics_output_path.parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame([metrics_results]).to_csv(metrics_output_path, index=False)
+                logger.info(f"Metrics saved successfully to: {metrics_output_path}")
+            except PermissionError:
+                logger.error(f"Permission denied saving metrics to: {metrics_output_path}")
+                raise
 
     except Exception as e:
         logger.error(f"Critical failure during training pipeline: {e}")
