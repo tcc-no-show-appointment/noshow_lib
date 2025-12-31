@@ -125,7 +125,7 @@ def load_and_process_data(
 
     return df
 
-
+#talvez organizar isso em outro arquivo
 def _save_securely(df: pd.DataFrame, path: Union[str, Path]) -> None:
     """
     Internal helper to securely save the DataFrame to a CSV file.

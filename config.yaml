@@ -18,7 +18,7 @@ split:
   test_frac: 0.2
 
 balancing: 
-  enabled: true
+  enabled: false
   method: "smote"             # smote ou smoteenn
   ratio: 0.5                  # No notebook você usou 0.5, no yaml estava 0.3. Ajuste aqui.
   k_neighbors: 5
