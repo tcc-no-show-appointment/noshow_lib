@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 def load_and_process_data(
     input_data: Union[str, Path, pd.DataFrame], 
     processed_path: Optional[Union[str, Path]] = None, 
-    config: Optional[Dict] = None
+    config: Optional[Dict] = None,
+    is_external_access: bool = False
 ) -> pd.DataFrame:
     
     """
@@ -28,6 +29,9 @@ def load_and_process_data(
         processed_path (str | Path, optional): Path where the processed CSV will be saved.
         config (dict, optional): Configuration dictionary (usually loaded from YAML).
                                 Expected keys: 'handle_missing', 'rename_columns', 'cast_types'.
+        is_external_access (bool): If True and config is None, attempts to load the preprocessing
+                                   configuration from the bundled config.yaml in noshow_lib.
+                                   If loading fails, returns raw dataframe without processing.
 
     Returns:
         pd.DataFrame: The processed pandas DataFrame.
@@ -59,10 +63,27 @@ def load_and_process_data(
             logger.error(f"Unexpected error reading CSV: {e}")
             raise
 
-    # Early return if no config provided
+    # Handle config resolution
     if not config:
-        logger.warning("No configuration provided. Skipping preprocessing.")
+        if is_external_access:
+            # Attempt to load default config from bundled config.yaml
+            try:
+                from noshow_lib.config import load_config
+                config_path = Path(__file__).parent / "config.yaml"
+                
+                if config_path.exists():
+                    full_config = load_config(config_path)
+                    config = full_config.get("preprocessing", {})
+                    logger.info(f"Loaded default preprocessing config from: {config_path}")
+                else:
+                    logger.warning(f"Default config.yaml not found at: {config_path}. Skipping preprocessing.")
+            except Exception as e:
+                logger.warning(f"Failed to load default config: {e}. Skipping preprocessing.")
+        else:
+            logger.warning("No configuration provided. Skipping preprocessing.")
     
+    # If still no config after all attempts, return raw data
+    if not config:
         if processed_path:
             path_obj = Path(processed_path)
             path_obj.parent.mkdir(parents=True, exist_ok=True)
