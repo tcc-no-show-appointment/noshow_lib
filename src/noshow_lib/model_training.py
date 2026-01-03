@@ -203,7 +203,8 @@ def train_model(
         # Load config from local config.yaml
         try:
             from noshow_lib.config import load_config
-            config_path = Path(__file__).parent.parent.parent / "config.yaml"
+            # Look for config.yaml in the package directory
+            config_path = Path(__file__).parent / "config.yaml"
             if not config_path.exists():
                 raise FileNotFoundError(f"config.yaml not found at: {config_path}")
             config = load_config(config_path)

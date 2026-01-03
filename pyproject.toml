@@ -5,7 +5,7 @@ description = "Biblioteca noshow-lib é usada para realizar a leitura e processa
 authors = [
   { name = "Guilherme Golçaves", email = "mattiolli.puertas@gmail.com" },
   { name = "Lohan Batista", email = "lohanbatista2003@gmail.com" },
-  { name = "Paulo Henrique", email = "mattiolli.puertas@gmail.com" },
+  { name = "Paulo Henrique", email = "pauloht3@gmail.com" },
   { name = "Rodrigo Puertas", email = "mattiolli.puertas@gmail.com" },
 ]
 dependencies = [
@@ -37,3 +37,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["noshow_lib"]
 package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+noshow_lib = ["*.yaml", "config.yaml"]

@@ -34,7 +34,7 @@ def main():
     # 1. SETUP PATHS & CONFIG
     # =================================================================
     project_root = Path(__file__).parent
-    config_path = project_root / "config.yaml"
+    config_path = project_root / "src" / "noshow_lib" / "config.yaml"
     
     logger.info(f"Loading configuration from: {config_path}")
     try:
