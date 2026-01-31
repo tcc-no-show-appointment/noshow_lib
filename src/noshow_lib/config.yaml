@@ -1,52 +1,76 @@
+# config.yaml
+
 data:
-  raw_data_path: "data/01 - raw/noshowappointments.csv"
-  processed_data_path: "data/02 - preprocessed/noshowappointments_processed.csv"
-  validation_split: 0.2
   target_column: "No-show"
 
-preprocessing:
-  handle_missing: "median"
-  categorical_encoding: "onehot"
-  numerical_scaling: "standard"
-  feature_selection:
-    method: "correlation"
-    threshold: 0.8
+schema:
+  required_columns:
+    - "id"
+    - "Status"
+    - "Marcacao"
+    - "DataHoraConsulta"
+    - "Idade"
+    - "Sexo"
+    - "CidadePaciente"
+    - "BairroPaciente"
+    - "TipoConvenio"
+    - "idUnicoPaciente"
+    - "UnidadeAtendimento"
+    - "EnderecoUnidadeAtendimento"
+    - "CEPUnidadeAtendimento"
+    - "Especialidade"
 
-split:
-  strategy: "time"
-  date_column: "AppointmentDay"
-  test_frac: 0.2
+column_map:
+  "id": "appointment_id"
+  "Status": "appointment_status"
+  "Marcacao": "scheduled_at"
+  "DataHoraConsulta": "appointment_at"
+  "Idade": "patient_age"
+  "Sexo": "patient_sex"
+  "CidadePaciente": "patient_city"
+  "BairroPaciente": "patient_neighborhood"
+  "TipoConvenio": "insurance_type"
+  "idUnicoPaciente": "patient_id"
+  "UnidadeAtendimento": "unit_name"
+  "EnderecoUnidadeAtendimento": "unit_address"
+  "CEPUnidadeAtendimento": "unit_cep"
+  "Especialidade": "specialty"
 
-balancing: 
-  enabled: false
-  method: "smote"             # smote ou smoteenn
-  ratio: 0.5                  # No notebook você usou 0.5, no yaml estava 0.3. Ajuste aqui.
-  k_neighbors: 5
-
-model:
-  type: "LGBMClassifier"      # Nome exato da classe
-  parameters:
-    n_estimators: 300
-    learning_rate: 0.01
-    num_leaves: 20
-    max_depth: 5
-    min_child_samples: 20
-    subsample: 0.7
-    colsample_bytree: 0.7
-    objective: "binary"
-    class_weight: "balanced"
-    random_state: 42
-    n_jobs: -1
-    verbosity: -1           
-
-evaluation:
-  metrics:
-    - "roc_auc"
-    - "average_precision"
-    - "recall"
-    - "f1"
-    - "accuracy"
-  threshold_optimization:
-    enabled: true
-    optimize_for:
-      primary: "f1"           # F1 costuma ser melhor para equilibrar recall/precision
+column_order:
+  - "appointment_id"
+  - "patient_id"
+  - "appointment_status"
+  - "no_show"
+  - "scheduled_at"
+  - "appointment_at"
+  - "waiting_days"
+  - "is_same_day"
+  - "patient_sex"
+  - "patient_age"
+  - "age_group"
+  - "insurance_type"
+  - "patient_city"
+  - "patient_neighborhood"
+  - "unit_name"
+  - "specialty"
+  - "unit_address"
+  - "unit_cep"
+  - "appointment_weekday"
+  - "appointment_day_of_month"
+  - "appointment_week_of_month"
+  - "hour_appointment"
+  - "time_of_day"
+  - "is_weekend"
+  - "is_holiday"
+  - "month_sin"
+  - "month_cos"
+  - "weekday_sin"
+  - "weekday_cos"
+  - "hour_sin"
+  - "hour_cos"
+  - "previous_appointments_count"
+  - "days_since_last_visit"
+  - "appointments_in_same_schedule"
+  - "no_show_rate_patient"
+  - "specialty_no_show_rate"
+  - "unit_no_show_rate"
