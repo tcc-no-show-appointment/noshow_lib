@@ -1,49 +1,44 @@
-# src/noshow_lib/config.py
-
+import yaml
 from pathlib import Path
 from typing import Union, Dict
-import yaml
-from yaml import YAMLError
+from .logger import setup_logger
+
+logger = setup_logger("noshow_lib.config")
 
 def load_config(path: Union[str, Path]) -> Dict:
     """
-    Loads a YAML configuration file and returns it as a dictionary.
-
-    This function handles file opening, parsing, and error management specifically
-    for YAML files. If the file is empty, it returns an empty dictionary.
-
-    Args:
-        path (str or Path): The file path to the YAML configuration file. 
-                            Can be a string or a pathlib.Path object.
-
-    Returns:
-        dict: A dictionary containing the configuration parameters loaded from the file.
-              Returns an empty dict {} if the file is valid but empty.
-
-    Raises:
-        FileNotFoundError: If the file does not exist at the specified path.
-        YAMLError: If the file contains invalid YAML syntax.
-    """
-    path = Path(path)
+    Carrega um arquivo de configuração YAML.
     
+    Args:
+        path: Caminho para o arquivo YAML.
+        
+    Returns:
+        Dict: Dicionário de configuração.
+        
+    Raises:
+        FileNotFoundError: Se o arquivo não existir.
+        yaml.YAMLError: Se o arquivo tiver erro de sintaxe.
+    """
+    config_path = Path(path)
+    
+    if not config_path.exists():
+        logger.error(f"Arquivo de configuração não encontrado: {config_path}")
+        raise FileNotFoundError(f"Configuração ausente em {config_path}")
+
     try:
-        with path.open("r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
             
         if config is None:
+            logger.warning(f"O arquivo {config_path} está vazio.")
             return {}
             
+        logger.info(f"Configuração carregada com sucesso de {config_path}")
         return config
 
-    except FileNotFoundError:
-        print(f"Error: Configuration file not found at: {path}")
-        raise 
-
-    except YAMLError as e:
-        print(f"Error: Syntax error in YAML file: {path}")
-        print(f"Error details: {e}")
+    except yaml.YAMLError as e:
+        logger.error(f"Erro de sintaxe no arquivo YAML {config_path}: {e}")
         raise
-
     except Exception as e:
-        print(f"Unexpected error while loading config: {e}")
+        logger.error(f"Erro inesperado ao carregar config de {config_path}: {e}")
         raise

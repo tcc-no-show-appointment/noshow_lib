@@ -1,58 +1,60 @@
 import pandas as pd
 import yaml
 from pathlib import Path
-import logging
+from typing import Dict, Union, Optional
+from .logger import setup_logger
 
-# Configuração básica de log para exibir no console se não houver um logger global
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = setup_logger("noshow_lib.data_handler")
 
-
-def load_and_validate(df: pd.DataFrame, config_path: str) -> pd.DataFrame:
+def load_and_validate(df: pd.DataFrame, config: Union[str, Path, Dict]) -> pd.DataFrame:
     """
-    Carrega configuração, valida a presença de colunas e aplica tipagem inicial.
+    Valida a presença de colunas obrigatórias e aplica tipagem inicial.
+    
+    Args:
+        df: DataFrame a ser validado.
+        config: Caminho para o arquivo YAML ou dicionário de configuração.
+        
+    Returns:
+        pd.DataFrame: DataFrame validado e com tipos convertidos.
     """
-    logger.info(f"Iniciando carga e validacao. Arquivo de config: {config_path}")
-
-    # 1. Carga do Config
-    try:
+    # 1. Resolver Configuração
+    if isinstance(config, (str, Path)):
+        config_path = Path(config)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Arquivo de configuração não encontrado: {config_path}")
         with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        logger.info("Arquivo de configuracao YAML carregado com sucesso.")
-    except Exception as e:
-        logger.error(f"Falha ao ler o arquivo de configuracao: {e}")
-        raise
+            config_dict = yaml.safe_load(f)
+    else:
+        config_dict = config
 
-    # 2. Validação de Colunas
-    required = config.get("schema", {}).get("required_columns", [])
-    logger.info(f"Verificando presenca de {len(required)} colunas obrigatorias.")
+    logger.info("Iniciando validação de dados...")
 
-    missing = list(set(required) - set(df.columns))
-    if missing:
-        logger.error(f"Validacao falhou. Colunas ausentes no banco de dados: {missing}")
-        raise ValueError(f"Colunas ausentes: {missing}")
+    # 2. Validação de Schema (Colunas Obrigatórias)
+    required_columns = config_dict.get("schema", {}).get("required_columns", [])
+    if required_columns:
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            error_msg = f"Falha na validação de schema. Colunas ausentes: {missing_columns}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info(f"Sucesso: Todas as {len(required_columns)} colunas obrigatórias foram encontradas.")
 
-    logger.info("Validacao de schema concluida: todas as colunas obrigatorias foram encontradas.")
+    # 3. Conversão de Tipos (Casting)
+    df_processed = df.copy()
+    preprocessing_cfg = config_dict.get("preprocessing", {})
+    cast_types = preprocessing_cfg.get("cast_types", {})
 
-    # 3. Processamento Inicial e Casting (Tipagem)
-    df_proc = df.copy()
-    proc_config = config.get("preprocessing", {})
-
-    if "cast_types" in proc_config:
-        cast_dict = proc_config["cast_types"]
-        logger.info(f"Iniciando conversao de tipos (casting) para {len(cast_dict)} colunas.")
-
-        for col, dtype in cast_dict.items():
-            if col in df_proc.columns:
+    if cast_types:
+        logger.info(f"Aplicando conversão de tipos para {len(cast_types)} colunas.")
+        for col, dtype in cast_types.items():
+            if col in df_processed.columns:
                 try:
-                    if "date" in dtype or "time" in dtype:
-                        df_proc[col] = pd.to_datetime(df_proc[col])
-                        logger.debug(f"Coluna '{col}' convertida para datetime.")
+                    if any(date_term in dtype.lower() for date_term in ["date", "time", "datetime"]):
+                        df_processed[col] = pd.to_datetime(df_processed[col], errors="coerce")
                     else:
-                        df_proc[col] = df_proc[col].astype(dtype)
-                        logger.debug(f"Coluna '{col}' convertida para {dtype}.")
+                        df_processed[col] = df_processed[col].astype(dtype)
                 except Exception as e:
-                    logger.warning(f"Nao foi possivel converter a coluna '{col}' para {dtype}: {e}")
+                    logger.warning(f"Não foi possível converter a coluna '{col}' para {dtype}: {e}")
 
-    logger.info("Processamento inicial concluido com sucesso.")
-    return df_proc
+    logger.info("Carga e validação concluídas com sucesso.")
+    return df_processed

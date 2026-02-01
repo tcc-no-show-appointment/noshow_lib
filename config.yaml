@@ -1,7 +1,7 @@
 # config.yaml
 
 data:
-  target_column: "No-show"
+  target_column: "no_show"
 
 schema:
   required_columns:
@@ -19,6 +19,10 @@ schema:
     - "EnderecoUnidadeAtendimento"
     - "CEPUnidadeAtendimento"
     - "Especialidade"
+  id_columns:
+    - "appointment_id"
+    - "patient_id"
+    - "appointment_at"
 
 column_map:
   "id": "appointment_id"
@@ -74,3 +78,59 @@ column_order:
   - "no_show_rate_patient"
   - "specialty_no_show_rate"
   - "unit_no_show_rate"
+
+split:
+  test_frac: 0.2
+  date_column: "appointment_at"
+
+model:
+  type: "CatBoost"
+  artifact_path: "models/catboost_champion.joblib"
+  
+  # --- NOVO: LISTA EXPLÍCITA DE FEATURES ---
+  features:
+    # Features Numéricas
+    - "waiting_days"
+    - "patient_age"
+    - "previous_appointments_count"
+    - "days_since_last_visit"
+    - "appointments_in_same_schedule"
+    - "no_show_rate_patient"
+    - "specialty_no_show_rate"
+    - "unit_no_show_rate"
+    - "hour_appointment"
+    
+    # Features Cíclicas/Temporais tratadas
+    - "month_sin"
+    - "month_cos"
+    - "weekday_sin"
+    - "weekday_cos"
+    - "hour_sin"
+    - "hour_cos"
+    - "is_weekend"
+    - "is_holiday"
+    - "is_same_day"
+
+    - "insurance_type"
+    - "patient_neighborhood"
+    - "unit_name"
+    - "age_group"
+    - "patient_city"
+    - "appointment_weekday"
+    # - "patient_sex"
+    # - "specialty"
+
+  parameters:
+    iterations: 10000
+    learning_rate: 0.14
+    depth: 8
+    l2_leaf_reg: 5.329
+    random_strength: 2.110
+    bagging_temperature: 0.8858646592243893
+    scale_pos_weight: 2.22
+    loss_function: "Logloss"
+    eval_metric: "AUC"
+    random_seed: 42
+    early_stopping_rounds: 50
+    verbose: 100
+    allow_writing_files: False

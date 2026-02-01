@@ -1,0 +1,136 @@
+# config.yaml
+
+data:
+  target_column: "no_show"
+
+schema:
+  required_columns:
+    - "id"
+    - "Status"
+    - "Marcacao"
+    - "DataHoraConsulta"
+    - "Idade"
+    - "Sexo"
+    - "CidadePaciente"
+    - "BairroPaciente"
+    - "TipoConvenio"
+    - "idUnicoPaciente"
+    - "UnidadeAtendimento"
+    - "EnderecoUnidadeAtendimento"
+    - "CEPUnidadeAtendimento"
+    - "Especialidade"
+  id_columns:
+    - "appointment_id"
+    - "patient_id"
+    - "appointment_at"
+
+column_map:
+  "id": "appointment_id"
+  "Status": "appointment_status"
+  "Marcacao": "scheduled_at"
+  "DataHoraConsulta": "appointment_at"
+  "Idade": "patient_age"
+  "Sexo": "patient_sex"
+  "CidadePaciente": "patient_city"
+  "BairroPaciente": "patient_neighborhood"
+  "TipoConvenio": "insurance_type"
+  "idUnicoPaciente": "patient_id"
+  "UnidadeAtendimento": "unit_name"
+  "EnderecoUnidadeAtendimento": "unit_address"
+  "CEPUnidadeAtendimento": "unit_cep"
+  "Especialidade": "specialty"
+
+column_order:
+  - "appointment_id"
+  - "patient_id"
+  - "appointment_status"
+  - "no_show"
+  - "scheduled_at"
+  - "appointment_at"
+  - "waiting_days"
+  - "is_same_day"
+  - "patient_sex"
+  - "patient_age"
+  - "age_group"
+  - "insurance_type"
+  - "patient_city"
+  - "patient_neighborhood"
+  - "unit_name"
+  - "specialty"
+  - "unit_address"
+  - "unit_cep"
+  - "appointment_weekday"
+  - "appointment_day_of_month"
+  - "appointment_week_of_month"
+  - "hour_appointment"
+  - "time_of_day"
+  - "is_weekend"
+  - "is_holiday"
+  - "month_sin"
+  - "month_cos"
+  - "weekday_sin"
+  - "weekday_cos"
+  - "hour_sin"
+  - "hour_cos"
+  - "previous_appointments_count"
+  - "days_since_last_visit"
+  - "appointments_in_same_schedule"
+  - "no_show_rate_patient"
+  - "specialty_no_show_rate"
+  - "unit_no_show_rate"
+
+split:
+  test_frac: 0.2
+  date_column: "appointment_at"
+
+model:
+  type: "CatBoost"
+  artifact_path: "models/catboost_champion.joblib"
+  
+  # --- NOVO: LISTA EXPLÍCITA DE FEATURES ---
+  features:
+    # Features Numéricas
+    - "waiting_days"
+    - "patient_age"
+    - "previous_appointments_count"
+    - "days_since_last_visit"
+    - "appointments_in_same_schedule"
+    - "no_show_rate_patient"
+    - "specialty_no_show_rate"
+    - "unit_no_show_rate"
+    - "hour_appointment"
+    
+    # Features Cíclicas/Temporais tratadas
+    - "month_sin"
+    - "month_cos"
+    - "weekday_sin"
+    - "weekday_cos"
+    - "hour_sin"
+    - "hour_cos"
+    - "is_weekend"
+    - "is_holiday"
+    - "is_same_day"
+
+    - "insurance_type"
+    - "patient_neighborhood"
+    - "unit_name"
+    - "age_group"
+    - "patient_city"
+    - "appointment_weekday"
+    # - "patient_sex"
+    # - "specialty"
+
+  parameters:
+    iterations: 10000
+    learning_rate: 0.14
+    depth: 8
+    l2_leaf_reg: 5.329
+    random_strength: 2.110
+    bagging_temperature: 0.8858646592243893
+    scale_pos_weight: 2.22
+    loss_function: "Logloss"
+    eval_metric: "AUC"
+    random_seed: 42
+    early_stopping_rounds: 50
+    verbose: 100
+    allow_writing_files: False
