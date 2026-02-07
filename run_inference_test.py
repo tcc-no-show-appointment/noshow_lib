@@ -2,6 +2,7 @@ import sys
 import yaml
 import pandas as pd
 import logging
+import joblib
 from pathlib import Path
 
 # Configuração de logs
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 try:
     from config.db import db
@@ -21,7 +23,7 @@ except ImportError as e:
     print(f"❌ Erro de importação: {e}")
     sys.exit(1)
 
-CONFIG_PATH = PROJECT_ROOT / "src" / "noshow_lib" / "config.yaml"
+CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 MODEL_PATH = PROJECT_ROOT / "models" / "catboost_champion.joblib"
 OUTPUT_PATH = PROJECT_ROOT / "models" / "predictions_test.csv"
 
@@ -39,12 +41,24 @@ def main():
         print("❌ Erro: Nenhum dado encontrado para teste.")
         return
 
-    # 3. Executar Inferência
+    # 3. Carregar Modelo
+    if not MODEL_PATH.exists():
+        print(f"❌ Erro: Modelo não encontrado em {MODEL_PATH}")
+        return
+
+    print(f"--> Carregando modelo de {MODEL_PATH}...")
+    try:
+        model = joblib.load(MODEL_PATH)
+    except Exception as e:
+        print(f"❌ Erro ao carregar modelo: {e}")
+        return
+
+    # 4. Executar Inferência
     print("--> Iniciando Inferência...")
     try:
         df_results = predict(
+            model=model,
             input_data=df_input,
-            model_path=MODEL_PATH,
             config=config,
             output_path=OUTPUT_PATH
         )
@@ -52,6 +66,7 @@ def main():
         print("\n" + "="*40)
         print("TESTE DE INFERÊNCIA CONCLUÍDO")
         print("="*40)
+
         print(f"Shape do resultado: {df_results.shape}")
         print(f"Colunas retornadas: {df_results.columns.tolist()}")
         print("\nPrimeiras 5 linhas:")

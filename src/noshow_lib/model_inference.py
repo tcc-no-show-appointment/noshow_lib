@@ -1,15 +1,15 @@
 import pandas as pd
 import joblib
 from pathlib import Path
-from typing import Union, Dict, Optional, List
+from typing import Union, Dict, Optional, List, Any
 from pandas.errors import EmptyDataError, ParserError
 from .logger import setup_logger
 
 logger = setup_logger("noshow_lib.model_inference")
 
 def predict(
-    input_data: Union[str, Path, pd.DataFrame], 
-    model_path: Union[str, Path], 
+    model: Any,
+    input_data: pd.DataFrame, 
     config: Dict,
     output_path: Optional[Union[str, Path]] = None, 
     threshold: float = 0.5
@@ -18,8 +18,8 @@ def predict(
     Executa a inferência de forma robusta para produção.
     
     Args:
-        input_data: Dados de entrada (CSV ou DataFrame).
-        model_path: Caminho para o modelo treinado (.joblib).
+        model: Objeto do modelo treinado (já carregado via joblib).
+        input_data: Dados de entrada (DataFrame).
         config: Dicionário de configuração.
         output_path: Caminho opcional para salvar o resultado em CSV.
         threshold: Limite de probabilidade para classificação.
@@ -27,7 +27,6 @@ def predict(
     Returns:
         pd.DataFrame: DataFrame com IDs, probabilidades e predições.
     """
-    model_path = Path(model_path)
     if output_path:
         output_path = Path(output_path)
 
@@ -42,20 +41,12 @@ def predict(
     id_cols = config.get("schema", {}).get("id_columns", ["appointment_id", "patient_id"])
     
     # 2. Carregar Dados
-    try:
-        if isinstance(input_data, pd.DataFrame):
-            df = input_data.copy()
-            logger.info(f"Dados recebidos via DataFrame. Shape: {df.shape}")
-        else:
-            data_path = Path(input_data)
-            if not data_path.exists():
-                raise FileNotFoundError(f"Arquivo de dados não encontrado: {data_path}")
-            df = pd.read_csv(data_path)
-            logger.info(f"Dados carregados de {data_path}. Shape: {df.shape}")
-
-    except (EmptyDataError, ParserError, Exception) as e:
-        logger.error(f"Erro ao carregar dados: {e}")
-        raise
+    # Assumindo que input_data já é um DataFrame conforme solicitado
+    if not isinstance(input_data, pd.DataFrame):
+         raise ValueError("input_data deve ser um pandas.DataFrame")
+    
+    df = input_data.copy()
+    logger.info(f"Dados recebidos. Shape: {df.shape}")
 
     # 3. Preservar Identificadores
     found_ids = [col for col in id_cols if col in df.columns]
@@ -95,28 +86,24 @@ def predict(
         for col in cat_features:
             X_inference[col] = X_inference[col].fillna('MISSING').astype(str)
 
-    # 6. Carregar Modelo
-    if not model_path.exists():
-        logger.error(f"Arquivo do modelo não encontrado: {model_path}")
-        raise FileNotFoundError(f"Arquivo do modelo não encontrado: {model_path}")
-
+    # 6. Executar Predição (Modelo já carregado)
     try:
-        model = joblib.load(model_path)
-        logger.info(f"Modelo carregado com sucesso de {model_path}")
-    except Exception as e:
-        logger.error(f"Erro ao carregar o modelo .joblib: {e}")
-        raise RuntimeError(f"Falha no carregamento do modelo: {e}")
-
-    # 7. Executar Predição
-    try:
-        probs = model.predict_proba(X_inference)[:, 1]
+        # Verifica se o modelo tem predict_proba, caso contrário usa predict
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(X_inference)[:, 1]
+        else:
+            # Fallback para modelos sem predict_proba (ex: regressão ou SVM simples), embora improvável aqui
+            logger.warning("Modelo não possui predict_proba. Usando predict e assumindo 0/1.")
+            probs = model.predict(X_inference)
+            
         preds = (probs >= threshold).astype(int)
         logger.info("Cálculo de probabilidades concluído.")
     except Exception as e:
         logger.error(f"Erro durante a execução da predição: {e}")
         raise RuntimeError(f"Falha na execução da inferência: {e}")
 
-    # 8. Consolidar Resultados
+    # 7. Consolidar Resultados
+
     result_df = df_ids.copy()
     result_df["probability"] = probs
     result_df["prediction"] = preds
