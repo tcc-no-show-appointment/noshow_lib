@@ -38,12 +38,12 @@ def main():
     df_input = db.query(query)
 
     if df_input is None or df_input.empty:
-        print("❌ Erro: Nenhum dado encontrado para teste.")
+        print("Erro: Nenhum dado encontrado para teste.")
         return
 
     # 3. Carregar Modelo
     if not MODEL_PATH.exists():
-        print(f"❌ Erro: Modelo não encontrado em {MODEL_PATH}")
+        print(f"Erro: Modelo não encontrado em {MODEL_PATH}")
         return
 
     print(f"--> Carregando modelo de {MODEL_PATH}...")

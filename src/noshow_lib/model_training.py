@@ -32,16 +32,38 @@ def train_model(df: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
     if not feature_list:
         logger.error("A lista 'features' não foi encontrada no config.yaml")
         raise ValueError("A lista 'features' é obrigatória no config.yaml")
+    
+    # Validação de Schema de Treinamento
+    from .data_handler import load_and_validate
+    try:
+        # Revalida o DataFrame usando o schema de TREINAMENTO
+        # Isso garante que 'Status' e outras colunas críticas estejam presentes
+        load_and_validate(df, config, mode="training")
+    except Exception as e:
+        logger.error(f"Erro na validação do schema de treinamento: {e}")
+        raise
 
     # 2. Split de Dados (Estratificado)
     logger.info("Iniciando preparação do split de treino/teste...")
+    
+    # Limpeza de segurança: Remover linhas com target nulo (que podem vir da inferência mista ou dados sujos)
+    initial_len = len(df)
+    df_train_valid = df.dropna(subset=[target]).copy()
+    dropped_count = initial_len - len(df_train_valid)
+    
+    if dropped_count > 0:
+        logger.warning(f"Removidas {dropped_count} linhas com target '{target}' nulo/inválido para o treinamento.")
+    
+    if df_train_valid.empty:
+        raise ValueError(f"Nenhum dado válido para treinamento após remover targets nulos na coluna '{target}'.")
+
     test_frac = split_cfg.get("test_frac", 0.2)
     
     train_df, test_df = train_test_split(
-        df, 
+        df_train_valid, 
         test_size=test_frac, 
         random_state=42, 
-        stratify=df[target] if target in df.columns else None
+        stratify=df_train_valid[target] if target in df_train_valid.columns else None
     )
     
     # 3. Seleção de Features e Target

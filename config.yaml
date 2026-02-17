@@ -4,7 +4,8 @@ data:
   target_column: "no_show"
 
 schema:
-  required_columns:
+  # Colunas obrigatórias para TREINAMENTO
+  training_columns:
     - "id"
     - "Status"
     - "Marcacao"
@@ -19,6 +20,23 @@ schema:
     - "EnderecoUnidadeAtendimento"
     - "CEPUnidadeAtendimento"
     - "Especialidade"
+
+  # Colunas obrigatórias para INFERÊNCIA (sem Status)
+  inference_columns:
+    - "id"
+    - "Marcacao"
+    - "DataHoraConsulta"
+    - "Idade"
+    - "Sexo"
+    - "CidadePaciente"
+    - "BairroPaciente"
+    - "TipoConvenio"
+    - "idUnicoPaciente"
+    - "UnidadeAtendimento"
+    - "EnderecoUnidadeAtendimento"
+    - "CEPUnidadeAtendimento"
+    - "Especialidade"
+
   id_columns:
     - "appointment_id"
     - "patient_id"

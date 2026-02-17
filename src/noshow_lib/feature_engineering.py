@@ -54,13 +54,18 @@ def _rename_columns(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
 def _filter_noshow_status(df: pd.DataFrame) -> pd.DataFrame:
     """Filtra apenas registros com desfecho binário conhecido (Realizado ou Falta)."""
     col = "appointment_status"
+    # Se a coluna não existe (inferência), não filtra nada
     if col not in df.columns:
-        logger.warning(f"Coluna '{col}' não encontrada para filtragem de status.")
         return df
     
+    # Se existe, filtra apenas os válidos para treino/análise
     allowed = {"realizado", "falta"}
-    df[col] = df[col].astype("string").str.strip().str.lower()
-    mask = df[col].isin(allowed)
+    # Normaliza para comparação, tratando nulos como string vazia temporariamente
+    status_normalized = df[col].astype("string").str.strip().str.lower().fillna("")
+    
+    # Mantém linhas onde status é válido OU é nulo/vazio (assumindo inferência mista)
+    # Se for estritamente treino, nulos deveriam ser removidos, mas aqui flexibilizamos
+    mask = status_normalized.isin(allowed) | (status_normalized == "") | status_normalized.isna()
     filtered_df = df[mask].copy()
     
     logger.info(f"Filtragem de status: {len(df)} -> {len(filtered_df)} registros.")
@@ -94,9 +99,23 @@ def _create_target_variable(df: pd.DataFrame) -> pd.DataFrame:
     """Cria a variável alvo binária: 1 = Falta (no-show), 0 = Realizado."""
     col = "appointment_status"
     if col not in df.columns:
+        # Se não tem status, não tem target (inferência pura)
         return df
     
-    df["no_show"] = np.where(df[col].str.lower() == "falta", 1, 0).astype("int8")
+    # Lógica robusta:
+    # 1. Normaliza
+    s = df[col].astype("string").str.strip().str.lower()
+    
+    # 2. Mapeia: falta -> 1, realizado -> 0, outros/nulo -> NaN
+    conditions = [
+        s == "falta",
+        s == "realizado"
+    ]
+    choices = [1, 0]
+    
+    # Cria a coluna com NaNs onde não corresponde (ex: nulo ou status desconhecido)
+    df["no_show"] = np.select(conditions, choices, default=np.nan)
+    
     return df
 
 def _create_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -142,18 +161,32 @@ def _create_patient_history(df: pd.DataFrame) -> pd.DataFrame:
     id_col = 'patient_id'
     date_col = 'appointment_at'
     
-    if id_col not in df.columns or date_col not in df.columns or 'no_show' not in df.columns:
+    # Se colunas essenciais faltam, retorna sem fazer nada
+    if id_col not in df.columns or date_col not in df.columns:
         return df
 
+    # Ordena para garantir cálculo temporal correto
     df = df.sort_values(by=[id_col, date_col])
     
-    # Contagem de consultas anteriores
+    # 1. Contagem de consultas anteriores (independente de target)
     df["previous_appointments_count"] = df.groupby(id_col).cumcount()
     
-    # Taxa de No-Show (excluindo a consulta atual para evitar leakage)
-    cumsum_target = df.groupby(id_col)['no_show'].cumsum()
-    df["no_show_rate_patient"] = ((cumsum_target - df['no_show']) / df["previous_appointments_count"]).fillna(-1)
-    
+    # 2. Taxa de No-Show (depende de target)
+    if 'no_show' in df.columns:
+        grouped = df.groupby(id_col)['no_show']
+        
+        # Expanding mean deslocada: média de todos os anteriores
+        df["no_show_rate_patient"] = grouped.apply(
+            lambda x: x.shift(1).expanding().mean()
+        ).reset_index(level=0, drop=True)
+        
+        # Preenche vazios (primeira consulta) com -1
+        df["no_show_rate_patient"] = df["no_show_rate_patient"].fillna(-1)
+        
+    else:
+        # Modo Inferência sem coluna de target: Cold Start
+        df["no_show_rate_patient"] = -1.0
+        
     return df
 
 def _create_age_groups(df: pd.DataFrame) -> pd.DataFrame:
@@ -190,20 +223,25 @@ def _create_behavioral_features(df: pd.DataFrame) -> pd.DataFrame:
 def _create_contextual_rates(df: pd.DataFrame) -> pd.DataFrame:
     """Taxas de No-Show por contexto (Especialidade e Unidade)."""
     df_feat = df.copy()
-    if 'no_show' not in df_feat.columns or 'appointment_at' not in df_feat.columns:
+    if 'appointment_at' not in df_feat.columns:
         return df_feat
 
     df_feat = df_feat.sort_values('appointment_at')
     
+    has_target = 'no_show' in df_feat.columns
+    
     for col in ["unit_name", "specialty"]:
         if col in df_feat.columns:
-            # Nome amigável para o config (unit_name -> unit_no_show_rate)
             feature_name = f"{col.replace('_name', '')}_no_show_rate"
             
-            # Média expansiva excluindo o registro atual (leakage protection)
-            df_feat[feature_name] = df_feat.groupby(col)["no_show"].transform(
-                lambda x: x.shift(1).expanding().mean()
-            ).fillna(-1)
+            if has_target:
+                # Média expansiva excluindo o registro atual
+                df_feat[feature_name] = df_feat.groupby(col)["no_show"].transform(
+                    lambda x: x.shift(1).expanding().mean()
+                ).fillna(-1)
+            else:
+                # Cold Start se não tem target
+                df_feat[feature_name] = -1.0
             
     return df_feat
 

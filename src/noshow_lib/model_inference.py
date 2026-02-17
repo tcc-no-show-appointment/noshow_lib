@@ -45,8 +45,15 @@ def predict(
     if not isinstance(input_data, pd.DataFrame):
          raise ValueError("input_data deve ser um pandas.DataFrame")
     
-    df = input_data.copy()
-    logger.info(f"Dados recebidos. Shape: {df.shape}")
+    # Validação de Schema de Inferência
+    from .data_handler import load_and_validate
+    try:
+        df = load_and_validate(input_data, config, mode="inference")
+    except Exception as e:
+        logger.error(f"Erro na validação do schema de inferência: {e}")
+        raise
+
+    logger.info(f"Dados recebidos e validados. Shape: {df.shape}")
 
     # 3. Preservar Identificadores
     found_ids = [col for col in id_cols if col in df.columns]
