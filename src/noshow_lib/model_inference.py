@@ -1,51 +1,45 @@
-import pandas as pd
 import joblib
+import pandas as pd
 from pathlib import Path
-from typing import Union, Dict, Optional, List, Any
-from pandas.errors import EmptyDataError, ParserError
+from typing import Union, Dict, Optional, Any
+
 from .logger import setup_logger
 
 logger = setup_logger("noshow_lib.model_inference")
 
+
 def predict(
-    model: Any,
-    input_data: pd.DataFrame, 
+    models: Dict[str, Any],
+    input_data: pd.DataFrame,
     config: Dict,
-    output_path: Optional[Union[str, Path]] = None, 
-    threshold: float = 0.5
+    output_path: Optional[Union[str, Path]] = None,
+    thresholds: Optional[Dict[str, float]] = None,
 ) -> pd.DataFrame:
     """
-    Executa a inferência de forma robusta para produção.
-    
+    Executa inferência roteando cada registro ao modelo da sua specialty_group.
+
     Args:
-        model: Objeto do modelo treinado (já carregado via joblib).
-        input_data: Dados de entrada (DataFrame).
+        models: Dict {specialty_group: modelo carregado}. Use load_models() para carregar.
+        input_data: DataFrame de entrada.
         config: Dicionário de configuração.
         output_path: Caminho opcional para salvar o resultado em CSV.
-        threshold: Limite de probabilidade para classificação.
-        
+        thresholds: Dict {specialty_group: threshold}. Usa 0.5 como fallback se None ou ausente.
+
     Returns:
-        pd.DataFrame: DataFrame com IDs, probabilidades e predições.
+        pd.DataFrame: DataFrame com [IDs, specialty_group, probability, prediction],
+                      na mesma ordem do input.
     """
+    if not isinstance(models, dict) or not models:
+        raise ValueError("'models' deve ser um dicionário não-vazio {specialty_group: model}.")
+    if not isinstance(input_data, pd.DataFrame):
+        raise ValueError("'input_data' deve ser um pandas.DataFrame.")
+
     if output_path:
         output_path = Path(output_path)
 
-    # 1. Carregar Configurações
-    model_cfg = config.get("model", {})
-    feature_list = model_cfg.get("features")
-    if not feature_list:
-        logger.error("A lista 'features' não foi encontrada no config.yaml")
-        raise ValueError("A lista 'features' não foi encontrada no config.yaml")
+    thresholds = thresholds or {}
 
-    # Identificadores para manter no output
-    id_cols = config.get("schema", {}).get("id_columns", ["appointment_id", "patient_id"])
-    
-    # 2. Carregar Dados
-    # Assumindo que input_data já é um DataFrame conforme solicitado
-    if not isinstance(input_data, pd.DataFrame):
-         raise ValueError("input_data deve ser um pandas.DataFrame")
-    
-    # Validação de Schema de Inferência
+    # 1. Validação de schema
     from .data_handler import load_and_validate
     try:
         df = load_and_validate(input_data, config, mode="inference")
@@ -55,74 +49,134 @@ def predict(
 
     logger.info(f"Dados recebidos e validados. Shape: {df.shape}")
 
-    # 3. Preservar Identificadores
-    found_ids = [col for col in id_cols if col in df.columns]
-    df_ids = df[found_ids].copy()
-    if not found_ids:
-        logger.warning(f"Nenhum dos IDs configurados {id_cols} foi encontrado no input.")
+    # 2. Feature engineering automático se necessário
+    feature_list = config.get("model_specialty", {}).get("features") or []
+    missing_features = [c for c in feature_list if c not in df.columns]
 
-    # 4. Validação de Features (Feature Matching)
-    missing_features = [col for col in feature_list if col not in df.columns]
-    if missing_features:
-        logger.info(f"Features ausentes no input: {missing_features}. Iniciando Feature Engineering...")
+    if missing_features or "specialty_group" not in df.columns:
+        logger.info("Features ausentes ou specialty_group não encontrado. Executando build_features()...")
         from .feature_engineering import build_features
         try:
             df = build_features(df, config)
-            # Re-verificar IDs após FE (pois FE pode filtrar linhas ou reordenar)
-            found_ids = [col for col in id_cols if col in df.columns]
-            df_ids = df[found_ids].copy()
-            
-            missing_features = [col for col in feature_list if col not in df.columns]
-            if missing_features:
-                error_msg = f"Inconsistência fatal. Colunas ainda ausentes após FE: {missing_features}"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
         except Exception as e:
-            logger.error(f"Erro ao tentar reconstruir features: {e}")
+            logger.error(f"Erro ao executar build_features: {e}")
             raise
 
-    # Selecionar apenas as features necessárias para o modelo (Allowlist)
-    X_inference = df[feature_list].copy()
-    logger.info(f"Features selecionadas para inferência: {len(feature_list)}")
+    if "specialty_group" not in df.columns:
+        raise ValueError(
+            "Coluna 'specialty_group' não encontrada após feature engineering. "
+            "Verifique se o config e os dados estão corretos."
+        )
 
-    # 5. Consistência de Pré-processamento (Categóricas)
-    cat_features = X_inference.select_dtypes(include=['object', 'category', 'string']).columns.tolist()
-    
-    if cat_features:
-        logger.info(f"Tratando {len(cat_features)} colunas categóricas (Nulos -> 'MISSING').")
+    # 3. Preservar IDs e índice original para reordenar no final
+    id_cols = config.get("schema", {}).get("id_columns", ["appointment_id", "patient_id"])
+    found_ids = [c for c in id_cols if c in df.columns]
+    df = df.reset_index(drop=True)
+    df["_original_index"] = df.index
+
+    # 4. Inferência por specialty_group
+    specialty_col = df["specialty_group"].astype(str)
+    present_specialties = specialty_col.unique().tolist()
+    unknown = [s for s in present_specialties if s not in models]
+    if unknown:
+        logger.warning(
+            f"Especialidades sem modelo treinado (serão ignoradas): {unknown}. "
+            f"Modelos disponíveis: {list(models.keys())}"
+        )
+
+    results = []
+
+    for specialty, df_group in df.groupby(specialty_col):
+        specialty = str(specialty)
+        if specialty not in models:
+            continue
+
+        model = models[specialty]
+        threshold = thresholds.get(specialty, 0.5)
+
+        missing = [c for c in feature_list if c not in df_group.columns]
+        if missing:
+            logger.warning(f"[{specialty}] Features ausentes no grupo: {missing}. Pulando.")
+            continue
+
+        X = df_group[feature_list].copy()
+
+        cat_features = X.select_dtypes(include=["object", "category", "string"]).columns.tolist()
         for col in cat_features:
-            X_inference[col] = X_inference[col].fillna('MISSING').astype(str)
+            X[col] = X[col].astype(str).replace("nan", "MISSING").astype("category")
 
-    # 6. Executar Predição (Modelo já carregado)
-    try:
-        # Verifica se o modelo tem predict_proba, caso contrário usa predict
-        if hasattr(model, "predict_proba"):
-            probs = model.predict_proba(X_inference)[:, 1]
-        else:
-            # Fallback para modelos sem predict_proba (ex: regressão ou SVM simples), embora improvável aqui
-            logger.warning("Modelo não possui predict_proba. Usando predict e assumindo 0/1.")
-            probs = model.predict(X_inference)
-            
+        try:
+            probs = model.predict_proba(X)[:, 1]
+        except Exception as e:
+            logger.error(f"[{specialty}] Erro na predição: {e}")
+            continue
+
         preds = (probs >= threshold).astype(int)
-        logger.info("Cálculo de probabilidades concluído.")
-    except Exception as e:
-        logger.error(f"Erro durante a execução da predição: {e}")
-        raise RuntimeError(f"Falha na execução da inferência: {e}")
 
-    # 7. Consolidar Resultados
+        group_result = df_group[found_ids + ["_original_index"]].copy()
+        group_result["specialty_group"] = specialty
+        group_result["probability"] = probs
+        group_result["prediction"] = preds
+        results.append(group_result)
 
-    result_df = df_ids.copy()
-    result_df["probability"] = probs
-    result_df["prediction"] = preds
+    if not results:
+        raise RuntimeError("Nenhuma predição foi gerada. Verifique os modelos e os dados de entrada.")
 
-    # 9. Salvar Output
+    result_df = (
+        pd.concat(results, ignore_index=True)
+        .sort_values("_original_index")
+        .drop(columns=["_original_index"])
+        .reset_index(drop=True)
+    )
+
+    # 5. Salvar output
     if output_path:
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             result_df.to_csv(output_path, index=False)
-            logger.info(f"Resultados de inferência salvos em: {output_path}")
+            logger.info(f"Resultados salvos em: {output_path}")
         except Exception as e:
-            logger.error(f"Erro ao salvar arquivo de resultados: {e}")
+            logger.error(f"Erro ao salvar resultados: {e}")
             raise
 
+    logger.info(f"Inferência concluída. {len(result_df)} predições geradas.")
     return result_df
+
+
+def load_models(models_dir: Union[str, Path], config: Dict) -> Dict[str, Any]:
+    """
+    Carrega todos os modelos por especialidade salvos em models_dir.
+
+    Procura por arquivos com o padrão 'lgbm__{specialty}.joblib'.
+
+    Args:
+        models_dir: Diretório onde os modelos foram salvos.
+        config: Dicionário de configuração (não utilizado diretamente, reservado para extensões).
+
+    Returns:
+        Dict[str, Any]: {specialty_name_uppercase: model_object}
+    """
+    models_dir = Path(models_dir)
+    if not models_dir.exists():
+        raise FileNotFoundError(f"Diretório de modelos não encontrado: {models_dir}")
+
+    model_files = list(models_dir.glob("lgbm__*.joblib"))
+    if not model_files:
+        raise FileNotFoundError(
+            f"Nenhum modelo encontrado em '{models_dir}'. "
+            "Certifique-se de ter executado train_model() antes."
+        )
+
+    loaded: Dict[str, Any] = {}
+    for path in model_files:
+        # Extrai specialty do nome: lgbm__clinica_especializada.joblib → CLINICA_ESPECIALIZADA
+        specialty_raw = path.stem.replace("lgbm__", "")
+        specialty_key = specialty_raw.upper()
+        try:
+            loaded[specialty_key] = joblib.load(path)
+            logger.info(f"Modelo carregado: {path.name} → '{specialty_key}'")
+        except Exception as e:
+            logger.warning(f"Não foi possível carregar {path.name}: {e}")
+
+    logger.info(f"{len(loaded)} modelo(s) carregado(s): {list(loaded.keys())}")
+    return loaded

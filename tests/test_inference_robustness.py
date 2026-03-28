@@ -1,17 +1,11 @@
-
 import pandas as pd
 import yaml
 import joblib
 from pathlib import Path
-import sys
 
-# Adiciona o diretório src ao path para importar os módulos
-PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+from noshow_lib.model_inference import predict, load_models
 
-from noshow_lib.model_inference import predict
-
-# Input fornecido pelo usuário
+# Input SEM a coluna 'Status' (simulando inferência real antes da consulta)
 input_data = {
     "BairroPaciente": "BELA VISTA",
     "CEPUnidadeAtendimento": "04617-015",
@@ -22,56 +16,47 @@ input_data = {
     "Idade": 62,
     "Marcacao": "2024-11-16T08:00:00",
     "Sexo": "F",
-    "Status": "Realizado",
+    # "Status": "Realizado",  <-- REMOVIDO PROPOSITALMENTE
     "TipoConvenio": "Enfermaria",
     "UnidadeAtendimento": "CAMPO BELO",
     "id": 5642903,
     "idUnicoPaciente": "ID369425000"
 }
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 def main():
-    # 1. Carregar Configuração
-    config_path = PROJECT_ROOT / "config.yaml"
+    config_path = PROJECT_ROOT / "config" / "local.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    # 2. Criar DataFrame (Single Row)
     df_input = pd.DataFrame([input_data])
-    print("--> DataFrame de entrada criado:")
+    print("--> DataFrame de entrada (SEM STATUS):")
     print(df_input.T)
-    
-    # 3. Carregar Modelo (Joblib)
-    model_path = PROJECT_ROOT / "models" / "catboost_champion.joblib"
-    if not model_path.exists():
-        print(f"Erro: Modelo não encontrado em {model_path}")
+
+    models = load_models(PROJECT_ROOT / "models", config)
+    if not models:
+        print("Nenhum modelo encontrado. Execute train_model() primeiro.")
         return
 
-    print(f"--> Carregando modelo diretamente de {model_path}...")
-    model = joblib.load(model_path)
-
-    # 4. Rodar Inferência com a nova assinatura do predict
-    # predict(model, df, config)
     try:
-        print("\n--> Executando inferência com a nova assinatura (model, df, config)...")
-        
-        # A função predict agora cuida do Feature Engineering e validação
+        print("\n--> Executando inferência...")
         result_df = predict(
-            model=model,
+            models=models,
             input_data=df_input,
             config=config,
-            threshold=0.5
         )
 
         print("\n" + "="*40)
-        print("RESULTADO DA PREDIÇÃO")
+        print("RESULTADO DA PREDIÇÃO (SEM STATUS)")
         print("="*40)
         print(result_df)
-        
+
         if not result_df.empty:
             proba = result_df.iloc[0]['probability']
             pred = result_df.iloc[0]['prediction']
             print(f"\nProbabilidade No-Show: {proba:.4f}")
-            print(f"Predição: {pred} ({'Falta' if pred == 1 else 'Comparece'})")
+            print(f"Predição: {pred}")
         print("="*40)
 
     except Exception as e:

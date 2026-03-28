@@ -1,32 +1,24 @@
 import pandas as pd
 from pathlib import Path
 from noshow_lib import load_config, load_and_validate, build_features, setup_logger
-from config.db import db
 
 logger = setup_logger("test_fe_only")
 
-def main():
-    logger.info("INICIANDO TESTE: APENAS ENGENHARIA DE FEATURES (TABELA BRUTA)")
-    
-    # 1. Setup
-    # Consumindo o config.yaml externo (na raiz do projeto)
-    config_path = Path(__file__).parent / "config" / "prod.yaml"
-    
+CSV_PATH = Path(__file__).parent.parent / "abs_consultas_medicas_HT_v2.csv"
 
+def main():
+    logger.info("INICIANDO TESTE: APENAS ENGENHARIA DE FEATURES (CSV)")
+
+    config_path = Path(__file__).parent.parent / "config" / "local.yaml"
     config = load_config(config_path)
-    
-    # 2. Extração de Dados Brutos
-    logger.info("Buscando dados da tb_appointments_ht...")
-    df_raw = db.query("SELECT TOP 1000 * FROM tb_appointments_ht")
+
+    logger.info(f"Lendo CSV: {CSV_PATH.name}...")
+    df_raw = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8-sig", nrows=1000)
     logger.info(f"Dados brutos carregados: {df_raw.shape}")
-    
-    # 3. Validação e Tipagem
+
     df_validated = load_and_validate(df_raw, config)
-    
-    # 4. Feature Engineering
     df_features = build_features(df_validated, config)
-    
-    # 5. Verificação de Resultados
+
     print("\n" + "="*50)
     print("RESUMO DA ENGENHARIA DE FEATURES")
     print("="*50)
