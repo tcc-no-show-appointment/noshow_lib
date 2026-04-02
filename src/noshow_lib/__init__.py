@@ -1,4 +1,4 @@
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 from .config import load_config
 from .data_handler import load_and_validate
