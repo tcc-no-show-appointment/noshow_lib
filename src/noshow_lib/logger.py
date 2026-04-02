@@ -11,13 +11,14 @@ def setup_logger(name: str = "noshow_lib", level: int = logging.INFO) -> logging
     # Evita duplicar handlers se o logger já estiver configurado
     if not logger.handlers:
         logger.setLevel(level)
-        
+        logger.propagate = False
+
         # Formato do log: Data - Nome - Level - Mensagem
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        
+
         # Console Handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
