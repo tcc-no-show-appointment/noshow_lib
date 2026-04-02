@@ -1,3 +1,5 @@
+__version__ = "0.3.0"
+
 from .config import load_config
 from .data_handler import load_and_validate
 from .feature_engineering import build_features

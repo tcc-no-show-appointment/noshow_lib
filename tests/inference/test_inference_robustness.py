@@ -1,26 +1,29 @@
 import pandas as pd
 import yaml
+import joblib
 from pathlib import Path
-from noshow_lib import predict, load_models
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from noshow_lib.model_inference import predict, load_models
 
-# Registro de exemplo (sem Status — inferência real antes da consulta)
+# Input SEM a coluna 'Status' (simulando inferência real antes da consulta)
 input_data = {
-    "BairroPaciente": "VILA PRUDENTE",
-    "CEPUnidadeAtendimento": "03178-200",
+    "BairroPaciente": "BELA VISTA",
+    "CEPUnidadeAtendimento": "04617-015",
     "CidadePaciente": "SAO PAULO",
-    "DataHoraConsulta": "2024-12-10T09:00:00",
-    "EnderecoUnidadeAtendimento": "AV SAPOPEMBA - SAO PAULO",
-    "Especialidade": "FISIOTERAPIA",
-    "Idade": 34,
-    "Marcacao": "2024-11-20T10:00:00",
-    "Sexo": "M",
-    "TipoConvenio": "Particular",
-    "UnidadeAtendimento": "VILA PRUDENTE",
-    "id": 9900001,
-    "idUnicoPaciente": "ID000001000"
+    "DataHoraConsulta": "2024-11-23T14:00:00",
+    "EnderecoUnidadeAtendimento": "RUA VIEIRA DE MORAES",
+    "Especialidade": "CARDIOLOGIA",
+    "Idade": 62,
+    "Marcacao": "2024-11-16T08:00:00",
+    "Sexo": "F",
+    # "Status": "Realizado",  <-- REMOVIDO PROPOSITALMENTE
+    "TipoConvenio": "Enfermaria",
+    "UnidadeAtendimento": "CAMPO BELO",
+    "id": 5642903,
+    "idUnicoPaciente": "ID369425000"
 }
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def main():
     config_path = PROJECT_ROOT / "config" / "local.yaml"
@@ -28,7 +31,7 @@ def main():
         config = yaml.safe_load(f)
 
     df_input = pd.DataFrame([input_data])
-    print("--> DataFrame de entrada:")
+    print("--> DataFrame de entrada (SEM STATUS):")
     print(df_input.T)
 
     models = load_models(PROJECT_ROOT / "models", config)
@@ -36,10 +39,8 @@ def main():
         print("Nenhum modelo encontrado. Execute train_model() primeiro.")
         return
 
-    print(f"\n--> Modelos carregados: {list(models.keys())}")
-    print("--> Executando inferência...")
-
     try:
+        print("\n--> Executando inferência...")
         result_df = predict(
             models=models,
             input_data=df_input,
@@ -47,7 +48,7 @@ def main():
         )
 
         print("\n" + "="*40)
-        print("RESULTADO DA PREDIÇÃO")
+        print("RESULTADO DA PREDIÇÃO (SEM STATUS)")
         print("="*40)
         print(result_df)
 
@@ -55,7 +56,7 @@ def main():
             proba = result_df.iloc[0]['probability']
             pred = result_df.iloc[0]['prediction']
             print(f"\nProbabilidade No-Show: {proba:.4f}")
-            print(f"Predição: {pred} ({'Falta' if pred == 1 else 'Comparece'})")
+            print(f"Predição: {pred}")
         print("="*40)
 
     except Exception as e:

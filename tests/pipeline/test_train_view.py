@@ -4,16 +4,16 @@ from noshow_lib import load_config, load_and_validate, build_features, train_mod
 
 logger = setup_logger("test_train_view")
 
-CSV_PATH = Path(__file__).parent.parent / "abs_consultas_medicas_HT_v2.csv"
+DATA_PATH = Path(__file__).resolve().parent.parent.parent / "abs_consultas_medicas_HT_v2.parquet"
 
 def main():
-    logger.info("INICIANDO TESTE: TREINAMENTO VIA CSV (50.000 linhas)")
+    logger.info("INICIANDO TESTE: TREINAMENTO VIA PARQUET")
 
-    config_path = Path(__file__).parent.parent / "config" / "local.yaml"
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / "local.yaml"
     config = load_config(config_path)
 
-    logger.info(f"Carregando CSV: {CSV_PATH.name}...")
-    df_raw = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8-sig")
+    logger.info(f"Carregando Parquet: {DATA_PATH.name}...")
+    df_raw = pd.read_parquet(DATA_PATH)
     logger.info(f"Dados carregados: {df_raw.shape}")
 
     df_validated = load_and_validate(df_raw, config)

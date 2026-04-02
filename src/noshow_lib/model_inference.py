@@ -1,7 +1,7 @@
 import joblib
 import pandas as pd
 from pathlib import Path
-from typing import Union, Dict, Optional, Any
+from typing import Union, Dict, Any
 
 from .logger import setup_logger
 
@@ -12,8 +12,7 @@ def predict(
     models: Dict[str, Any],
     input_data: pd.DataFrame,
     config: Dict,
-    output_path: Optional[Union[str, Path]] = None,
-    thresholds: Optional[Dict[str, float]] = None,
+    thresholds: Dict[str, float] = None,
 ) -> pd.DataFrame:
     """
     Executa inferência roteando cada registro ao modelo da sua specialty_group.
@@ -22,7 +21,6 @@ def predict(
         models: Dict {specialty_group: modelo carregado}. Use load_models() para carregar.
         input_data: DataFrame de entrada.
         config: Dicionário de configuração.
-        output_path: Caminho opcional para salvar o resultado em CSV.
         thresholds: Dict {specialty_group: threshold}. Usa 0.5 como fallback se None ou ausente.
 
     Returns:
@@ -33,9 +31,6 @@ def predict(
         raise ValueError("'models' deve ser um dicionário não-vazio {specialty_group: model}.")
     if not isinstance(input_data, pd.DataFrame):
         raise ValueError("'input_data' deve ser um pandas.DataFrame.")
-
-    if output_path:
-        output_path = Path(output_path)
 
     thresholds = thresholds or {}
 
@@ -129,16 +124,6 @@ def predict(
         .reset_index(drop=True)
     )
 
-    # 5. Salvar output
-    if output_path:
-        try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            result_df.to_csv(output_path, index=False)
-            logger.info(f"Resultados salvos em: {output_path}")
-        except Exception as e:
-            logger.error(f"Erro ao salvar resultados: {e}")
-            raise
-
     logger.info(f"Inferência concluída. {len(result_df)} predições geradas.")
     return result_df
 
@@ -169,12 +154,12 @@ def load_models(models_dir: Union[str, Path], config: Dict) -> Dict[str, Any]:
 
     loaded: Dict[str, Any] = {}
     for path in model_files:
-        # Extrai specialty do nome: lgbm__clinica_especializada.joblib → CLINICA_ESPECIALIZADA
+        # Extrai specialty do nome: lgbm__clinica_especializada.joblib -> CLINICA_ESPECIALIZADA
         specialty_raw = path.stem.replace("lgbm__", "")
         specialty_key = specialty_raw.upper()
         try:
             loaded[specialty_key] = joblib.load(path)
-            logger.info(f"Modelo carregado: {path.name} → '{specialty_key}'")
+            logger.info(f"Modelo carregado: {path.name} -> '{specialty_key}'")
         except Exception as e:
             logger.warning(f"Não foi possível carregar {path.name}: {e}")
 

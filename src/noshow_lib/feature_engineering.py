@@ -19,7 +19,7 @@ def build_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
         config: Dicionário de configuração (YAML).
 
     Returns:
-        pd.DataFrame: DataFrame com todas as features calculadas (~55 features).
+        pd.DataFrame: DataFrame com todas as features calculadas (~59 features).
     """
     logger.info("Iniciando Pipeline de Feature Engineering...")
     initial_shape = df.shape

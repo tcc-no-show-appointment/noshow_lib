@@ -12,16 +12,16 @@ from noshow_lib import (
 
 logger = setup_logger("test_full_pipeline")
 
-CSV_PATH = Path(__file__).parent.parent / "abs_consultas_medicas_HT_v2.csv"
+DATA_PATH = Path(__file__).resolve().parent.parent.parent / "abs_consultas_medicas_HT_v2.parquet"
 
 def main():
-    logger.info("INICIANDO TESTE: PIPELINE COMPLETO (CSV -> FE -> TRAIN -> PREDICT)")
+    logger.info("INICIANDO TESTE: PIPELINE COMPLETO (PARQUET -> FE -> TRAIN -> PREDICT)")
 
-    config_path = Path(__file__).parent.parent / "config" / "local.yaml"
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / "local.yaml"
     config = load_config(config_path)
 
-    logger.info("Etapa 1: Carregando dados do CSV (amostra de 20.000 linhas)...")
-    df_raw = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8-sig", nrows=20_000)
+    logger.info("Etapa 1: Carregando dados do Parquet (amostra de 20.000 linhas)...")
+    df_raw = pd.read_parquet(DATA_PATH).head(20_000)
 
     logger.info("Etapa 2: Validação e Engenharia de Features...")
     df_validated = load_and_validate(df_raw, config)

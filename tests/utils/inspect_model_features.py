@@ -1,7 +1,7 @@
 import joblib
 from pathlib import Path
 
-MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 
 model_files = list(MODELS_DIR.glob("lgbm__*.joblib"))
 
