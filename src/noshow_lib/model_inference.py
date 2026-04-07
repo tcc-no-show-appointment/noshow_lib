@@ -1,7 +1,7 @@
 import joblib
 import pandas as pd
 from pathlib import Path
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, Optional
 
 from .logger import setup_logger
 
@@ -13,6 +13,7 @@ def predict(
     input_data: pd.DataFrame,
     config: Dict,
     thresholds: Dict[str, float] = None,
+    history_df: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Executa inferência roteando cada registro ao modelo da sua specialty_group.
@@ -22,6 +23,9 @@ def predict(
         input_data: DataFrame de entrada.
         config: Dicionário de configuração.
         thresholds: Dict {specialty_group: threshold}. Usa 0.5 como fallback se None ou ausente.
+        history_df: DataFrame opcional com histórico de consultas passadas do paciente.
+                    Deve conter as mesmas colunas de entrada (incluindo Status com desfecho
+                    conhecido). Usado para calcular features de histórico corretamente.
 
     Returns:
         pd.DataFrame: DataFrame com [IDs, specialty_group, probability, prediction],
@@ -31,6 +35,15 @@ def predict(
         raise ValueError("'models' deve ser um dicionário não-vazio {specialty_group: model}.")
     if not isinstance(input_data, pd.DataFrame):
         raise ValueError("'input_data' deve ser um pandas.DataFrame.")
+
+    if history_df is not None:
+        if not isinstance(history_df, pd.DataFrame):
+            raise ValueError("'history_df' deve ser um pandas.DataFrame.")
+        if history_df.empty:
+            logger.warning("history_df fornecido está vazio. Ignorando histórico.")
+            history_df = None
+        else:
+            logger.info(f"Histórico de paciente fornecido: {history_df.shape[0]} registros.")
 
     thresholds = thresholds or {}
 
@@ -52,7 +65,7 @@ def predict(
         logger.info("Features ausentes ou specialty_group não encontrado. Executando build_features()...")
         from .feature_engineering import build_features
         try:
-            df = build_features(df, config)
+            df = build_features(df, config, history_df=history_df)
         except Exception as e:
             logger.error(f"Erro ao executar build_features: {e}")
             raise

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import holidays
 import re
-from typing import Dict
+from typing import Dict, Optional
 from .logger import setup_logger
 
 logger = setup_logger("noshow_lib.feature_engineering")
@@ -10,13 +10,49 @@ logger = setup_logger("noshow_lib.feature_engineering")
 TARGET_COLUMN = "no_show"
 
 
-def build_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
+def _normalize_history_columns(
+    history_df: pd.DataFrame, input_df: pd.DataFrame, config: Dict
+) -> pd.DataFrame:
+    """Garante que history_df usa os mesmos nomes de coluna do input_df."""
+    column_map = config.get("column_map", {})
+    if not column_map:
+        return history_df
+
+    reverse_map = {v: k for k, v in column_map.items()}
+    raw_cols = set(column_map.keys())
+    renamed_cols = set(column_map.values())
+    input_cols = set(input_df.columns)
+    history_cols = set(history_df.columns)
+
+    input_uses_raw = bool(input_cols & raw_cols)
+
+    if input_uses_raw:
+        # Input usa nomes originais (ex: DataHoraConsulta) — alinhar history para o mesmo
+        if history_cols & renamed_cols and not (history_cols & raw_cols):
+            history_df = history_df.rename(columns=reverse_map)
+    else:
+        # Input usa nomes internos (ex: appointment_at) — alinhar history para o mesmo
+        if history_cols & raw_cols and not (history_cols & renamed_cols):
+            history_df = history_df.rename(columns=column_map)
+
+    return history_df
+
+
+def build_features(
+    df: pd.DataFrame,
+    config: Dict,
+    history_df: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
     """
     Orquestra as transformações de feature engineering usando .pipe().
 
     Args:
         df: DataFrame original carregado do banco ou CSV.
         config: Dicionário de configuração (YAML).
+        history_df: DataFrame opcional com histórico de consultas passadas.
+                    Deve conter as mesmas colunas de entrada (incluindo Status
+                    com desfecho conhecido). Usado para calcular features de
+                    histórico do paciente durante inferência.
 
     Returns:
         pd.DataFrame: DataFrame com todas as features calculadas (~59 features).
@@ -24,8 +60,41 @@ def build_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
     logger.info("Iniciando Pipeline de Feature Engineering...")
     initial_shape = df.shape
 
+    has_history = history_df is not None and not history_df.empty
+
+    if has_history:
+        logger.info(
+            f"Histórico fornecido: {history_df.shape[0]} registros. "
+            f"Concatenando com {df.shape[0]} registros novos."
+        )
+        if len(history_df) > 100_000:
+            logger.warning(
+                f"history_df contém {len(history_df)} registros. "
+                f"Considere filtrar apenas pacientes relevantes para melhor performance."
+            )
+
+        history_df = _normalize_history_columns(history_df.copy(), df, config)
+        history_df["is_new_row"] = False
+
+        df = df.copy()
+        df["is_new_row"] = True
+        df = pd.concat([history_df, df], ignore_index=True)
+
+        # Normalizar colunas de data para evitar erro de mixed-format no pd.to_datetime
+        date_candidates = {"scheduled_at", "appointment_at"}
+        column_map = config.get("column_map", {})
+        for raw_name, internal_name in column_map.items():
+            if internal_name in date_candidates:
+                date_candidates.add(raw_name)
+        for col in date_candidates:
+            if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = pd.to_datetime(df[col], format="mixed", errors="coerce")
+    else:
+        df = df.copy()
+        df["is_new_row"] = True
+
     df_processed = (
-        df.copy()
+        df
         .pipe(_rename_columns, config)
         .pipe(_filter_noshow_status)
         .pipe(_convert_initial_types)
@@ -43,6 +112,17 @@ def build_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
         .pipe(_normalize_text)
         .pipe(_reorder_columns, config)
     )
+
+    if has_history:
+        n_before = len(df_processed)
+        df_processed = (
+            df_processed[df_processed["is_new_row"]]
+            .drop(columns=["is_new_row"])
+            .reset_index(drop=True)
+        )
+        logger.info(f"Filtrado de {n_before} -> {len(df_processed)} registros (apenas novos).")
+    else:
+        df_processed = df_processed.drop(columns=["is_new_row"])
 
     logger.info(f"Feature engineering finalizado. Shape inicial: {initial_shape} -> Final: {df_processed.shape}")
     return df_processed
