@@ -15,7 +15,7 @@ def _normalize_history_columns(
 ) -> pd.DataFrame:
     """Garante que history_df usa os mesmos nomes de coluna do input_df."""
     column_map = config.get("column_map", {})
-    if not column_map:
+    if not coalumn_map:
         return history_df
 
     reverse_map = {v: k for k, v in column_map.items()}
