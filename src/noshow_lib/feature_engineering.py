@@ -15,7 +15,7 @@ def _normalize_history_columns(
 ) -> pd.DataFrame:
     """Garante que history_df usa os mesmos nomes de coluna do input_df."""
     column_map = config.get("column_map", {})
-    if not coalumn_map:
+    if not column_map:
         return history_df
 
     reverse_map = {v: k for k, v in column_map.items()}
@@ -553,7 +553,10 @@ def _create_holiday_features(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     df = df.copy()
-    br_holidays = holidays.Brazil()
+    # Pre-popular os anos presentes nos dados — holidays.Brazil() é lazy e
+    # pd.Series.isin(lazy_dict) sempre retorna False (set(lazy_dict) == vazio)
+    years = df[col].dt.year.dropna().unique().tolist()
+    br_holidays = holidays.Brazil(years=years if years else [2024])
     dates = df[col].dt.date
 
     df["is_holiday"] = dates.isin(br_holidays).astype("int8")
