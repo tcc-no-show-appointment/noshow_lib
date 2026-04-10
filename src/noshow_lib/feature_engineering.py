@@ -266,6 +266,28 @@ def _create_patient_history(df: pd.DataFrame) -> pd.DataFrame:
     if id_col not in df.columns or date_col not in df.columns:
         return df
 
+    # Skip if precomputed stats were already injected via stats_enrichment
+    _precomputed_signals = ["previous_appointments_count", "past_no_shows", "no_show_rate_patient"]
+    if all(c in df.columns for c in _precomputed_signals):
+        valid_mask = (
+            (df["previous_appointments_count"].notna())
+            & (df["previous_appointments_count"] != 0)
+        )
+        if valid_mask.any():
+            logger.info(
+                "Patient history columns already present with non-default values. "
+                "Skipping _create_patient_history (precomputed stats detected)."
+            )
+            # Still need to set columns that may be missing with safe defaults
+            for col in ["days_since_last_visit", "waiting_days_delta"]:
+                if col not in df.columns:
+                    df[col] = -1.0
+            if "has_patient_history" not in df.columns:
+                df["has_patient_history"] = (df["previous_appointments_count"] > 0).astype("int8")
+            if "patient_tenure_days" not in df.columns:
+                df["patient_tenure_days"] = 0
+            return df
+
     sort_cols = [id_col, date_col]
     if "appointment_id" in df.columns:
         sort_cols.append("appointment_id")
@@ -468,6 +490,26 @@ def _create_contextual_rates(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "appointment_at" not in df.columns:
         return df
+
+    # Skip if precomputed contextual stats were already injected
+    _contextual_signals = ["unit_no_show_rate", "specialty_no_show_rate", "specialty_group_no_show_rate"]
+    if all(c in df.columns for c in _contextual_signals):
+        valid_mask = (
+            (df["unit_no_show_rate"].notna())
+            & (df["unit_no_show_rate"] != -1.0)
+        )
+        if valid_mask.any():
+            logger.info(
+                "Contextual rate columns already present with non-default values. "
+                "Skipping _create_contextual_rates (precomputed stats detected)."
+            )
+            if "specialty_high_no_show_flag" not in df.columns:
+                threshold = np.float32(0.35)
+                df["specialty_high_no_show_flag"] = np.where(
+                    df["specialty_group_no_show_rate"] < 0, 0,
+                    (df["specialty_group_no_show_rate"] >= threshold).astype("int8"),
+                ).astype("int8")
+            return df
 
     sort_cols = ["appointment_at"]
     if "appointment_id" in df.columns:
