@@ -18,6 +18,11 @@ from sklearn.metrics import (
 )
 
 from .logger import setup_logger
+from .feature_engineering import (
+    fit_patient_cluster,
+    apply_patient_cluster,
+    save_cluster_artifact,
+)
 
 logger = setup_logger("noshow_lib.model_training")
 
@@ -67,6 +72,23 @@ def train_model(df: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Dict]:
         raise ValueError(f"Coluna alvo '{target}' não encontrada no DataFrame.")
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    # K-Means do paciente: treina sobre o df global (todas as especialidades) e
+    # salva o artefato. Depois aplica para preencher `cluster_patient` antes do
+    # split por especialidade. Em inferência, `build_features` carrega esse
+    # artefato automaticamente.
+    if "cluster_patient" in feature_list:
+        logger.info("Treinando K-Means do paciente (cluster_patient)...")
+        cluster_artifact = fit_patient_cluster(df)
+        if cluster_artifact:
+            save_cluster_artifact(cluster_artifact, artifact_dir)
+            df = apply_patient_cluster(df, cluster_artifact)
+        else:
+            logger.warning(
+                "Cluster do paciente não foi treinado (features insuficientes). "
+                "cluster_patient permanecerá com -1 — verifique se isso é aceitável."
+            )
+
     results: Dict[str, Dict] = {}
     skipped = []
 

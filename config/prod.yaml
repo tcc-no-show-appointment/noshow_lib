@@ -134,37 +134,16 @@ model_specialty:
   optuna_trials: 50
   train_frac: 0.70
   val_frac: 0.15
+  # Lista de 32 features (0.4.0): união das listas selecionadas pelo train_03 do TCC
+  # através do sweep adaptativo + blacklist + overrides manuais.
+  # As 27 features removidas (holiday, geo, sin/cos, etc) deixaram de ser geradas
+  # por build_features() — ver comentários em feature_engineering.py.
   features:
+    # Temporais
     - "waiting_days"
     - "is_same_day"
-    - "appointment_weekday"
-    - "is_weekend"
-    - "appointment_day_of_month"
-    - "appointment_week_of_month"
-    - "is_month_start"
-    - "is_month_end"
     - "hour_appointment"
-    - "time_of_day"
-    - "month_sin"
-    - "month_cos"
-    - "weekday_sin"
-    - "weekday_cos"
-    - "hour_sin"
-    - "hour_cos"
-    - "is_holiday"
-    - "is_pre_holiday"
-    - "is_post_holiday"
-    - "is_bridge_day"
-    - "is_holiday_window"
-    - "patient_sex"
-    - "patient_age"
-    - "age_group"
-    - "insurance_type"
-    - "patient_city"
-    - "patient_neighborhood"
-    - "unit_name"
-    - "specialty_group"
-    - "has_patient_history"
+    # Histórico do paciente
     - "previous_appointments_count"
     - "patient_tenure_days"
     - "past_no_shows"
@@ -172,25 +151,30 @@ model_specialty:
     - "consecutive_no_shows_2"
     - "past_cancellations_count"
     - "cancellation_rate"
-    - "no_show_rate_patient"
     - "no_show_rate_patient_smoothed"
-    - "no_show_rate_recent_3"
     - "no_show_rate_recent_5"
     - "days_since_last_visit"
     - "days_since_last_no_show"
+    # Comportamentais e demográficas
+    - "patient_age"
     - "appointments_in_same_schedule_day"
     - "is_diff_specialty"
     - "waiting_days_delta"
-    - "age_x_waiting_days"
-    - "no_show_rate_x_waiting_days"
-    - "age_x_specialty_risk"
     - "gender_age_profile"
+    - "patient_city"
+    - "patient_neighborhood"
+    # Cluster do paciente (K-Means treinado em model_training)
+    - "cluster_patient"
+    # Contextuais (taxa de no-show)
+    - "unit_name"
     - "unit_no_show_rate"
     - "specialty_no_show_rate"
     - "specialty_group_no_show_rate"
     - "insurance_no_show_rate"
-    - "neighborhood_risk_score"
-    - "specialty_high_no_show_flag"
-    - "same_city"
-    - "is_local_resident"
-    - "same_cep_prefix5"
+    # Coluna raw mantida (alguns modelos usam diretamente)
+    - "specialty"
+    - "unit_address"
+    # Interações
+    - "age_x_waiting_days"
+    - "no_show_rate_x_waiting_days"
+    - "age_x_specialty_risk"

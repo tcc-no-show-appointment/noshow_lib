@@ -2,12 +2,27 @@ import pandas as pd
 import numpy as np
 import holidays
 import re
-from typing import Dict, Optional
+import joblib
+from pathlib import Path
+from typing import Dict, Optional, Tuple, Any
 from .logger import setup_logger
 
 logger = setup_logger("noshow_lib.feature_engineering")
 
 TARGET_COLUMN = "no_show"
+
+# Features usadas para construir o cluster do paciente (K-Means).
+# Mesmas usadas em train_03_feature_selection.ipynb (build_patient_clusters helper).
+CLUSTER_FEATURES = [
+    "previous_appointments_count",
+    "past_no_shows",
+    "no_show_rate_patient_smoothed",
+    "cancellation_rate",
+    "days_since_last_visit",
+    "waiting_days",
+    "patient_age",
+]
+CLUSTER_ARTIFACT_NAME = "kmeans_cluster_patient.joblib"
 
 
 def _normalize_history_columns(
@@ -93,6 +108,11 @@ def build_features(
         df = df.copy()
         df["is_new_row"] = True
 
+    # Tenta carregar artefato pré-treinado do cluster do paciente. Se não existir,
+    # cluster_patient = -1 (model_training preenche os clusters reais após fit).
+    artifact_dir = config.get("model_specialty", {}).get("artifact_dir", "models/")
+    cluster_artifact = load_cluster_artifact(Path(artifact_dir))
+
     df_processed = (
         df
         .pipe(_rename_columns, config)
@@ -107,8 +127,11 @@ def build_features(
         .pipe(_create_behavioral_features)
         .pipe(_create_contextual_rates)
         .pipe(_create_interaction_features)
-        .pipe(_create_holiday_features)
-        .pipe(_create_geo_features)
+        .pipe(apply_patient_cluster, cluster_artifact)
+        # Steps removidos (0.4.0): features não consumidas por nenhum dos 8 modelos.
+        # Reativar caso uma especialidade volte a usar holiday/geo features no futuro.
+        # .pipe(_create_holiday_features)
+        # .pipe(_create_geo_features)
         .pipe(_normalize_text)
         .pipe(_reorder_columns, config)
     )
@@ -233,24 +256,24 @@ def _create_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     df["is_same_day"] = (df["waiting_days"] == 0).astype("int8")
 
     appt = df[col_appt]
-    df["appointment_weekday"] = appt.dt.weekday.astype("int8")
-    df["is_weekend"] = appt.dt.weekday.isin([5, 6]).astype("int8")
-    df["appointment_day_of_month"] = appt.dt.day.astype("int8")
-    df["appointment_week_of_month"] = ((appt.dt.day - 1) // 7 + 1).astype("int8")
-    df["is_month_start"] = (appt.dt.day <= 5).astype("int8")
-    df["is_month_end"] = (appt.dt.day >= 25).astype("int8")
     df["hour_appointment"] = appt.dt.hour.fillna(0).astype("int8")
 
-    bins = [-1, 6, 11, 14, 18, 24]
-    labels = ["NIGHT", "MORNING", "MIDDAY", "AFTERNOON", "EVENING"]
-    df["time_of_day"] = pd.cut(df["hour_appointment"], bins=bins, labels=labels, right=False).astype("category")
-
-    df["month_sin"] = np.sin(2 * np.pi * appt.dt.month / 12).astype("float32")
-    df["month_cos"] = np.cos(2 * np.pi * appt.dt.month / 12).astype("float32")
-    df["weekday_sin"] = np.sin(2 * np.pi * df["appointment_weekday"] / 7).astype("float32")
-    df["weekday_cos"] = np.cos(2 * np.pi * df["appointment_weekday"] / 7).astype("float32")
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour_appointment"] / 24).astype("float32")
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour_appointment"] / 24).astype("float32")
+    # Features temporais removidas (0.4.0): não consumidas por nenhum dos 8 modelos.
+    # df["appointment_weekday"] = appt.dt.weekday.astype("int8")
+    # df["is_weekend"] = appt.dt.weekday.isin([5, 6]).astype("int8")
+    # df["appointment_day_of_month"] = appt.dt.day.astype("int8")
+    # df["appointment_week_of_month"] = ((appt.dt.day - 1) // 7 + 1).astype("int8")
+    # df["is_month_start"] = (appt.dt.day <= 5).astype("int8")
+    # df["is_month_end"] = (appt.dt.day >= 25).astype("int8")
+    # bins = [-1, 6, 11, 14, 18, 24]
+    # labels = ["NIGHT", "MORNING", "MIDDAY", "AFTERNOON", "EVENING"]
+    # df["time_of_day"] = pd.cut(df["hour_appointment"], bins=bins, labels=labels, right=False).astype("category")
+    # df["month_sin"] = np.sin(2 * np.pi * appt.dt.month / 12).astype("float32")
+    # df["month_cos"] = np.cos(2 * np.pi * appt.dt.month / 12).astype("float32")
+    # df["weekday_sin"] = np.sin(2 * np.pi * df["appointment_weekday"] / 7).astype("float32")
+    # df["weekday_cos"] = np.cos(2 * np.pi * df["appointment_weekday"] / 7).astype("float32")
+    # df["hour_sin"] = np.sin(2 * np.pi * df["hour_appointment"] / 24).astype("float32")
+    # df["hour_cos"] = np.cos(2 * np.pi * df["hour_appointment"] / 24).astype("float32")
 
     return df
 
@@ -297,7 +320,8 @@ def _create_patient_history(df: pd.DataFrame) -> pd.DataFrame:
 
     # Contagem e antiguidade
     df["previous_appointments_count"] = grp.cumcount().astype("int32")
-    df["has_patient_history"] = (df["previous_appointments_count"] > 0).astype("int8")
+    # has_patient_history removida (0.4.0): não consumida por nenhum modelo.
+    # df["has_patient_history"] = (df["previous_appointments_count"] > 0).astype("int8")
     df["patient_tenure_days"] = (
         df[date_col] - grp[date_col].transform("min")
     ).dt.days.fillna(0).astype("int32")
@@ -340,21 +364,24 @@ def _create_patient_history(df: pd.DataFrame) -> pd.DataFrame:
         df["no_show_rate_patient_smoothed"] = (
             (past_no_shows + 1) / (df["previous_appointments_count"] + 2)
         ).astype("float32")
-        df["no_show_rate_patient"] = np.where(
-            df["previous_appointments_count"] == 0,
-            -1.0,
-            df["no_show_rate_patient_smoothed"],
-        ).astype("float32")
+        # no_show_rate_patient removida (0.4.0): redundante com _smoothed (Spearman ~0.93).
+        # Modelos usam _smoothed em produção.
+        # df["no_show_rate_patient"] = np.where(
+        #     df["previous_appointments_count"] == 0,
+        #     -1.0,
+        #     df["no_show_rate_patient_smoothed"],
+        # ).astype("float32")
 
-        rate3 = grp[TARGET_COLUMN].transform(
-            lambda x: x.shift(1).rolling(3, min_periods=1).mean()
-        )
+        # no_show_rate_recent_3 removida (0.4.0): redundante com _recent_5 (janela maior é mais estável).
+        # rate3 = grp[TARGET_COLUMN].transform(
+        #     lambda x: x.shift(1).rolling(3, min_periods=1).mean()
+        # )
         rate5 = grp[TARGET_COLUMN].transform(
             lambda x: x.shift(1).rolling(5, min_periods=1).mean()
         )
-        df["no_show_rate_recent_3"] = np.where(
-            df["previous_appointments_count"] == 0, -1.0, rate3
-        ).astype("float32")
+        # df["no_show_rate_recent_3"] = np.where(
+        #     df["previous_appointments_count"] == 0, -1.0, rate3
+        # ).astype("float32")
         df["no_show_rate_recent_5"] = np.where(
             df["previous_appointments_count"] == 0, -1.0, rate5
         ).astype("float32")
@@ -367,10 +394,12 @@ def _create_patient_history(df: pd.DataFrame) -> pd.DataFrame:
         ).astype("float32")
         df.drop(columns=["_ns_date_tmp"], inplace=True)
     else:
+        # Fallback quando TARGET_COLUMN não existe (modo inferência sem histórico).
+        # no_show_rate_patient e no_show_rate_recent_3 removidas (0.4.0).
         for col in [
             "past_no_shows", "previous_no_show", "consecutive_no_shows_2",
-            "no_show_rate_patient", "no_show_rate_patient_smoothed",
-            "no_show_rate_recent_3", "no_show_rate_recent_5", "days_since_last_no_show",
+            "no_show_rate_patient_smoothed",
+            "no_show_rate_recent_5", "days_since_last_no_show",
         ]:
             df[col] = -1.0
 
@@ -522,7 +551,8 @@ def _create_contextual_rates(df: pd.DataFrame) -> pd.DataFrame:
         "unit_name": "unit_no_show_rate",
         "specialty": "specialty_no_show_rate",
         "specialty_group": "specialty_group_no_show_rate",
-        "patient_neighborhood": "neighborhood_risk_score",
+        # neighborhood_risk_score removida (0.4.0): não consumida por nenhum modelo.
+        # "patient_neighborhood": "neighborhood_risk_score",
         "insurance_type": "insurance_no_show_rate",
     }
 
@@ -538,16 +568,16 @@ def _create_contextual_rates(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df[out_col] = -1.0
 
-    # Flag de especialidade de alto risco
-    if "specialty_group_no_show_rate" in df.columns:
-        threshold = np.float32(0.35)
-        df["specialty_high_no_show_flag"] = np.where(
-            df["specialty_group_no_show_rate"].isna(),
-            0,
-            (df["specialty_group_no_show_rate"] >= threshold).astype("int8"),
-        ).astype("int8")
-    else:
-        df["specialty_high_no_show_flag"] = 0
+    # specialty_high_no_show_flag removida (0.4.0): não consumida por nenhum modelo.
+    # if "specialty_group_no_show_rate" in df.columns:
+    #     threshold = np.float32(0.35)
+    #     df["specialty_high_no_show_flag"] = np.where(
+    #         df["specialty_group_no_show_rate"].isna(),
+    #         0,
+    #         (df["specialty_group_no_show_rate"] >= threshold).astype("int8"),
+    #     ).astype("int8")
+    # else:
+    #     df["specialty_high_no_show_flag"] = 0
 
     return df
 
@@ -566,8 +596,10 @@ def _create_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["age_x_waiting_days"] = 0.0
 
-    if "no_show_rate_patient" in df.columns and "waiting_days" in df.columns:
-        rate = df["no_show_rate_patient"].clip(lower=0)
+    # Usa no_show_rate_patient_smoothed (0.4.0): substitui no_show_rate_patient que foi removida.
+    # As duas tinham Spearman ~0.93; smoothed é mais estável para pacientes novos.
+    if "no_show_rate_patient_smoothed" in df.columns and "waiting_days" in df.columns:
+        rate = df["no_show_rate_patient_smoothed"].clip(lower=0)
         df["no_show_rate_x_waiting_days"] = (
             rate * df["waiting_days"].astype("float32")
         ).astype("float32")
@@ -684,3 +716,124 @@ def _reorder_columns(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
     existing = [c for c in logical_order if c in df.columns]
     remaining = [c for c in df.columns if c not in existing]
     return df[existing + remaining]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Etapa 17 — Cluster do paciente (K-Means)
+# ─────────────────────────────────────────────────────────────────────────────
+def fit_patient_cluster(
+    df: pd.DataFrame,
+    k_range: Tuple[int, int] = (2, 7),
+    random_state: int = 42,
+) -> Dict[str, Any]:
+    """Treina K-Means sobre o perfil do paciente e retorna o artefato.
+
+    O número de clusters é escolhido via silhouette score na faixa k_range.
+    O artefato contém scaler, k_means e cluster_map (patient_id -> cluster).
+
+    Args:
+        df: DataFrame de treino com as colunas em CLUSTER_FEATURES e patient_id.
+        k_range: (min_k, max_k) — testa silhouette nesta faixa.
+        random_state: seed para reprodutibilidade.
+
+    Returns:
+        Dict com keys: 'scaler', 'kmeans', 'cluster_map' (dict patient_id -> int),
+        'best_k', 'best_score', 'features' (lista usada).
+    """
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import silhouette_score
+
+    available = [f for f in CLUSTER_FEATURES if f in df.columns]
+    if "patient_id" not in df.columns or len(available) < 2:
+        logger.warning(
+            "Não foi possível treinar cluster do paciente: "
+            f"features disponíveis={available}, patient_id={'patient_id' in df.columns}."
+        )
+        return {}
+
+    sort_col = "appointment_at" if "appointment_at" in df.columns else None
+    base = df.sort_values(sort_col) if sort_col else df
+    profiles = base.groupby("patient_id")[available].last().dropna()
+    if len(profiles) < max(k_range):
+        logger.warning(f"Poucos pacientes ({len(profiles)}) para treinar cluster. Pulando.")
+        return {}
+
+    scaler = StandardScaler()
+    X = scaler.fit_transform(profiles)
+
+    best_k, best_score, best_model = 2, -1.0, None
+    sample_size = min(5_000, len(X))
+    for k in range(k_range[0], k_range[1] + 1):
+        if k >= len(profiles):
+            break
+        km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+        labels = km.fit_predict(X)
+        score = silhouette_score(X, labels, sample_size=sample_size, random_state=random_state)
+        if score > best_score:
+            best_score, best_k, best_model = score, k, km
+
+    if best_model is None:
+        return {}
+
+    cluster_map = dict(zip(profiles.index, best_model.labels_))
+    logger.info(
+        f"K-Means do paciente treinado: k={best_k}, silhouette={best_score:.4f}, "
+        f"pacientes={len(profiles):,}, features={available}"
+    )
+    return {
+        "scaler": scaler,
+        "kmeans": best_model,
+        "cluster_map": cluster_map,
+        "best_k": best_k,
+        "best_score": float(best_score),
+        "features": available,
+    }
+
+
+def apply_patient_cluster(df: pd.DataFrame, artifact: Dict[str, Any]) -> pd.DataFrame:
+    """Atribui `cluster_patient` a cada linha. Pacientes não vistos no treino recebem -1.
+
+    Args:
+        df: DataFrame com `patient_id`.
+        artifact: Saída de fit_patient_cluster().
+
+    Returns:
+        df com coluna `cluster_patient` (int8). Se artifact for vazio ou inválido,
+        retorna df com cluster_patient = -1.
+    """
+    df = df.copy()
+    if not artifact or "cluster_map" not in artifact:
+        df["cluster_patient"] = np.int8(-1)
+        return df
+
+    cluster_map = artifact["cluster_map"]
+    if "patient_id" not in df.columns:
+        df["cluster_patient"] = np.int8(-1)
+        return df
+
+    df["cluster_patient"] = (
+        df["patient_id"].map(cluster_map).fillna(-1).astype("int8")
+    )
+    return df
+
+
+def save_cluster_artifact(artifact: Dict[str, Any], artifact_dir: Path) -> Path:
+    """Salva o artefato do K-Means em <artifact_dir>/kmeans_cluster_patient.joblib."""
+    artifact_dir = Path(artifact_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    out_path = artifact_dir / CLUSTER_ARTIFACT_NAME
+    joblib.dump(artifact, out_path)
+    logger.info(f"Artefato do cluster do paciente salvo em: {out_path}")
+    return out_path
+
+
+def load_cluster_artifact(artifact_dir: Path) -> Optional[Dict[str, Any]]:
+    """Carrega o artefato do K-Means se existir; retorna None caso contrário."""
+    path = Path(artifact_dir) / CLUSTER_ARTIFACT_NAME
+    if not path.exists():
+        logger.warning(f"Artefato do cluster do paciente não encontrado em {path}.")
+        return None
+    artifact = joblib.load(path)
+    logger.info(f"Artefato do cluster do paciente carregado: k={artifact.get('best_k')}.")
+    return artifact

@@ -2,6 +2,19 @@
 
 Parquet in → Parquet out, sem carregar em memória.
 Executa as mesmas 16 etapas de feature_engineering.py via SQL columnar.
+
+NOTA (0.4.0): o pipeline pandas (`feature_engineering.py`) foi enxugado para
+produzir apenas as 32 features consumidas pelos 8 modelos LightGBM + a feature
+nova `cluster_patient` (K-Means). Este módulo DuckDB ainda gera as 59 features
+originais via SQL (poda equivalente em SQL fica como trabalho futuro). Os
+consumidores devem filtrar a saída para as 32 features esperadas se forem usar
+o resultado com modelos treinados na 0.4.0. A feature `cluster_patient` NÃO é
+gerada por este módulo — precisa ser aplicada via pandas após o DuckDB:
+
+    output = build_features_from_parquet("raw.parquet", config, "features.parquet")
+    from noshow_lib.feature_engineering import apply_patient_cluster, load_cluster_artifact
+    df = pd.read_parquet(output)
+    df = apply_patient_cluster(df, load_cluster_artifact(Path("models/")))
 """
 
 import holidays
